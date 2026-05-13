@@ -14,7 +14,10 @@ def get_puzzles() -> Any:
         data = response.read()
         return json.loads(data)
 
-def download_puzzle(puzzle_id: str, save_folder="puzzles") -> None:
+def download_puzzle(puzzle_id: str, save_folder="puzzles", name="") -> None:
+    """
+    Given an puzzle_id, downloads the puzzle with its respective id as a json format. If a name is not given
+    """
 
     url = f"{BASE_URL}/api/puzzles/{puzzle_id}"
 
@@ -23,10 +26,7 @@ def download_puzzle(puzzle_id: str, save_folder="puzzles") -> None:
 
     os.makedirs(save_folder, exist_ok=True)
     
-    if len(sys.argv) == 4:
-        name = sys.argv[3]
-
-    else:
+    if name == "":
         name = puzzle_id
 
     file_path = os.path.join(save_folder, f"{name}.json")
@@ -43,12 +43,16 @@ def main()-> None:
     if instruction == "download":
         try:
             puzzle_id = sys.argv[2]
+
         except:
-            raise KeyError("No se ha puesto una id")
-        
-        download_puzzle(puzzle_id=puzzle_id)
+            raise Exception("No se ha puesto una id")
+
+        name = "" if len(sys.argv) != 4 else sys.argv[3]
+
+        download_puzzle(puzzle_id=puzzle_id, name=name)
     
     elif instruction == "get":
+
         puzzle_list = get_puzzles()
         print(puzzle_list)
 
