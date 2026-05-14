@@ -5,6 +5,7 @@ from typing import TypeAlias, Any
 from puzzle import Puzzle, State
 from collections import deque
 import json
+import os
 
 Coord: TypeAlias = tuple[int, int]
 StateKey: TypeAlias = tuple[Coord,...]
@@ -123,25 +124,33 @@ def constructive_bfs(puzzle: Puzzle) -> gt.Graph:
 def main() -> None:
     try:
         json_path = sys.argv[1]
-
+        
     except IndexError:
-        raise Exception("No se ha puesto la ruta del archivo JSON. Uso: python graph.py puzzles/nombre_puzzle.json")
+        raise Exception("No se ha puesto la ruta del archivo JSON. Uso: python src/graph.py puzzles/nombre_puzzle.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
         json_text = file.read()
         
     puzzle = Puzzle.from_json(json_text)
-    print(f"Building graph for {json_path}...")
+    
+    print(f"Construyendo grafo para {json_path}...")
     graph = constructive_bfs(puzzle) 
     
     graph.gp["puzzle"] = graph.new_graph_property("string")
     graph.gp["puzzle"] = json_text
 
-    if json_path.endswith(".json"):
-        out_path = json_path[:-5] + ".graphml"  # Le quitamos los últimos 5 caracteres (".json")
+    
+    os.makedirs("graphs", exist_ok=True)
 
+    nombre_archivo = os.path.basename(json_path)
+
+    if nombre_archivo.endswith(".json"):
+        nombre_base = nombre_archivo[:-5] 
     else:
-        out_path = json_path + ".graphml"       # Por si acaso le pasan un archivo sin extensión
+        nombre_base = nombre_archivo       
+
+    out_path = os.path.join("graphs", f"{nombre_base}.graphml")
+    
 
     graph.save(out_path)
     print(f"Grafo guardado exitosamente en: {out_path}")
