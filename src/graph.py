@@ -5,7 +5,7 @@ from typing import TypeAlias, Any
 from puzzle import Puzzle, State
 from collections import deque
 import json
-import os
+from pathlib import Path
 
 Coord: TypeAlias = tuple[int, int]
 StateKey: TypeAlias = tuple[Coord,...]
@@ -89,20 +89,8 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
     queue: deque[State] = deque()
     same_shape_pieces = equiv_shapes(puzzle=puzzle)
 
-    start_canonical = get_canonical_position(puzzle.start, same_shape_pieces)
-    v1 = g.add_vertex()
-    visited[start_canonical] = v1
-    queue.append(puzzle.start)
-
-    g.vp["state"][v1] = puzzle.start.to_json()
-    g.vp["is_start"][v1] = True
-    g.vp["is_goal"][v1] = lg.is_goal(puzzle, puzzle.start)
-
-
-
-
-    def evaluate(state: State, visited: dict[StateKey, Any], same_shape) -> Any:
-        canonical_state = get_canonical_position(state, same_shape)
+    def evaluate(state: State) -> Any:
+        canonical_state = get_canonical_position(state, same_shape_pieces)
         if canonical_state not in visited:
             v = g.add_vertex()
             visited[canonical_state] = v
@@ -114,6 +102,9 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
 
         return visited[canonical_state]
     
+    v_start = evaluate(puzzle.start)
+    g.vp["is_start"][v_start] = True
+   
     while queue:
 
         v_state = queue.popleft()
@@ -123,7 +114,7 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
 
         for move in possible_moves:
             u_state = lg.apply_move(puzzle, v_state, move)
-            v_next_id = evaluate(u_state, visited, same_shape_pieces)
+            v_next_id = evaluate(u_state)
 
             if not g.edge(v_curr_id, v_next_id):
                 e = g.add_edge(v_curr_id, v_next_id)
@@ -138,7 +129,7 @@ def main() -> None:
         json_path = sys.argv[1]
         
     except IndexError:
-        raise Exception("No valid json path. Use: python src/graph.py puzzles/nombre_puzzle.json")
+        raise Exception("No valid json path. Use: python src/graph.py puzzles/name_puzzle.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
         json_text = file.read()
@@ -148,19 +139,16 @@ def main() -> None:
     print(f"Building graph from {json_path}...")
     graph = constructive_bfs(puzzle, json_text) 
 
-    os.makedirs("graphs", exist_ok=True)
-    file_name = os.path.basename(json_path)
+    input_path = Path(json_path) 
 
-    if file_name.endswith(".json"):
-        nombre_base = file_name[:-5] 
+    # Define and create the output directory
+    output_dir = Path("graphs")
+    output_dir.mkdir(exist_ok=True)
 
-    else:
-        nombre_base = file_name       
+    # .stem automatically removes the '.json' extension for you!
+    out_path = output_dir / f"{input_path.stem}.graphml"    
 
-    out_path = os.path.join("graphs", f"{nombre_base}.graphml")
-    
-
-    graph.save(out_path)
+    graph.save(str(out_path))
     print(f"Graph was succesfully saved in: {out_path}")
 
 if __name__ == "__main__":
