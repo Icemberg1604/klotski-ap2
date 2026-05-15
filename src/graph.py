@@ -51,7 +51,13 @@ def state_key(puzzle: Puzzle, state: State | str) -> StateKey:
     return get_canonical_position(clean_state, identical_pieces)
 
 
-def create_empty_graph() -> gt.Graph:
+def create_empty_graph(json_str: str) -> gt.Graph:
+
+    """
+    Creates the graph with the folowing properties
+    Vertex properties: is_start for indicating which node is the starting state; is_goal for showing that the node is one of the 
+    posible solutions. "state" saves the data as a json str that posseses the state of the graph at that vertex.
+    """
     g = gt.Graph(directed=False)
     
     # v_properties
@@ -61,18 +67,23 @@ def create_empty_graph() -> gt.Graph:
 
     # e_property
     e_move = g.new_edge_property("string")
+
+    #g_property
+    g_puzzle = g.new_graph_property("string")
     
     # We save this properties in the graph, so we can access to them later
     g.vertex_properties["is_start"] = v_is_start
     g.vertex_properties["is_goal"] = v_is_goal
     g.vertex_properties["state"] = v_state
     g.edge_properties["move"] = e_move
-
+    g.graph_properties["puzzle"] = g_puzzle
+    g.graph_properties["puzzle"] = json_str
+ 
     return g
 
-def constructive_bfs(puzzle: Puzzle) -> gt.Graph:
+def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
 
-    g = create_empty_graph() #creates a graph with ids for its state, and if it is a goal vertex or not.
+    g = create_empty_graph(general_json) #creates a graph with ids for its state, and if it is a goal vertex or not.
 
     visited: dict[StateKey, Any] = {}  #type: ignore
     queue: deque[State] = deque()
@@ -122,38 +133,35 @@ def constructive_bfs(puzzle: Puzzle) -> gt.Graph:
     return g 
 
 def main() -> None:
+
     try:
         json_path = sys.argv[1]
         
     except IndexError:
-        raise Exception("No se ha puesto la ruta del archivo JSON. Uso: python src/graph.py puzzles/nombre_puzzle.json")
+        raise Exception("No valid json path. Use: python src/graph.py puzzles/nombre_puzzle.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
         json_text = file.read()
-        
+
+
     puzzle = Puzzle.from_json(json_text)
-    
-    print(f"Construyendo grafo para {json_path}...")
-    graph = constructive_bfs(puzzle) 
-    
-    graph.gp["puzzle"] = graph.new_graph_property("string")
-    graph.gp["puzzle"] = json_text
+    print(f"Building graph from {json_path}...")
+    graph = constructive_bfs(puzzle, json_text) 
 
-    
     os.makedirs("graphs", exist_ok=True)
+    file_name = os.path.basename(json_path)
 
-    nombre_archivo = os.path.basename(json_path)
+    if file_name.endswith(".json"):
+        nombre_base = file_name[:-5] 
 
-    if nombre_archivo.endswith(".json"):
-        nombre_base = nombre_archivo[:-5] 
     else:
-        nombre_base = nombre_archivo       
+        nombre_base = file_name       
 
     out_path = os.path.join("graphs", f"{nombre_base}.graphml")
     
 
     graph.save(out_path)
-    print(f"Grafo guardado exitosamente en: {out_path}")
+    print(f"Graph was succesfully saved in: {out_path}")
 
 if __name__ == "__main__":
     main()

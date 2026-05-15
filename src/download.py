@@ -14,7 +14,7 @@ def get_puzzles() -> Any:
         data = response.read()
         return json.loads(data)
 
-def download_puzzle(puzzle_id: str, save_folder="puzzles", name="") -> None:
+def download_puzzle(puzzle_id: str, save_folder="puzzles", name = "") -> None:
     """
     Given an puzzle_id, downloads the puzzle with its respective id as a json format. If a name is not given
     """
@@ -34,7 +34,7 @@ def download_puzzle(puzzle_id: str, save_folder="puzzles", name="") -> None:
     with open(file_path, "w") as f:
         json.dump(puzzle_data, f, indent=2)
         
-    print(f"Puzzle {puzzle_id} descargado con éxito. \n")
+    print(f"Puzzle {puzzle_id} downloaded succesfully \n")
 
 
 def main()-> None:
@@ -43,21 +43,18 @@ def main()-> None:
     if instruction == "download":
         try:
             puzzle_id = sys.argv[2]
-
         except:
-            raise Exception("No se ha puesto una id")
-
+            raise Exception("No valid id")
+        
         name = "" if len(sys.argv) != 4 else sys.argv[3]
-
         download_puzzle(puzzle_id=puzzle_id, name=name)
     
     elif instruction == "get":
-
         puzzle_list = get_puzzles()
         print(puzzle_list)
 
     else:
-        raise NotImplemented("No existe este comando")
+        raise NotImplemented("No valid command")
 
     
 if __name__ == '__main__':
