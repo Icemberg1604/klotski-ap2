@@ -66,7 +66,8 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     v_state = g.new_vertex_property("string")
 
     # e_property
-    e_move = g.new_edge_property("string")
+    e_piece = g.new_edge_property("int")
+    e_move_dir = g.new_edge_property("string")
 
     #g_property
     g_puzzle = g.new_graph_property("string")
@@ -75,15 +76,19 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     g.vertex_properties["is_start"] = v_is_start
     g.vertex_properties["is_goal"] = v_is_goal
     g.vertex_properties["state"] = v_state
-    g.edge_properties["move"] = e_move
+
+    g.edge_properties["piece"] = e_piece
+    g.edge_properties["direction"] = e_move_dir
+    
     g.graph_properties["puzzle"] = g_puzzle
+
     g.graph_properties["puzzle"] = json_str
  
     return g
 
 def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
 
-    g = create_empty_graph(general_json) #creates a graph with ids for its state, and if it is a goal vertex or not.
+    states_graph = create_empty_graph(general_json) #creates a graph with ids for its state, and if it is a goal vertex or not.
 
     visited: dict[StateKey, Any] = {}  #type: ignore
     queue: deque[State] = deque()
@@ -92,18 +97,18 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
     def evaluate(state: State) -> Any:
         canonical_state = get_canonical_position(state, same_shape_pieces)
         if canonical_state not in visited:
-            v = g.add_vertex()
+            v = states_graph.add_vertex()
             visited[canonical_state] = v
 
-            g.vp["is_goal"][v] = lg.is_goal(puzzle, state)
-            g.vp["state"][v] = state.to_json()
+            states_graph.vp["is_goal"][v] = lg.is_goal(puzzle, state)
+            states_graph.vp["state"][v] = state.to_json()
             
             queue.append(state)
 
         return visited[canonical_state]
     
     v_start = evaluate(puzzle.start)
-    g.vp["is_start"][v_start] = True
+    states_graph.vp["is_start"][v_start] = True
    
     while queue:
 
@@ -116,12 +121,14 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
             u_state = lg.apply_move(puzzle, v_state, move)
             v_next_id = evaluate(u_state)
 
-            if not g.edge(v_curr_id, v_next_id):
-                e = g.add_edge(v_curr_id, v_next_id)
-                p_idx, direction, _ = move
-                g.ep["move"][e] = f"{p_idx},{direction}"
+            if not states_graph.edge(v_curr_id, v_next_id):
+                edge = states_graph.add_edge(v_curr_id, v_next_id)
 
-    return g 
+                p_idx, direction, _ = move
+                states_graph.ep["piece"][edge] = p_idx
+                states_graph.ep["direction"][edge] = direction
+
+    return states_graph 
 
 def main() -> None:
 
