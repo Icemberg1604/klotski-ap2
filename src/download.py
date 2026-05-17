@@ -51,7 +51,8 @@ def main()-> None:
     
     elif instruction == "get":
         puzzle_list = get_puzzles()
-        print(puzzle_list)
+        for index, puzzle_idx in enumerate(puzzle_list):
+            print(f"{index + 1}: {puzzle_idx}")
 
     else:
         raise NotImplemented("No valid command")

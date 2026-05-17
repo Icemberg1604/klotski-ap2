@@ -112,6 +112,8 @@ def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
    
     while queue:
 
+        print(f"Remaining on queue: {len(queue)}")
+        print(f"Nodes on graph: {states_graph.num_vertices()}")
         v_state = queue.popleft()
         possible_moves = lg.possible_moves(puzzle, v_state)
         v_curr_canonical = get_canonical_position(v_state, same_shape_pieces)
@@ -139,12 +141,16 @@ def main() -> None:
         raise Exception("No valid json path. Use: python src/graph.py puzzles/name_puzzle.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
-        json_text = file.read()
+        json_data = json.load(file)
 
+    #Cleaning Json data
+    if "puzzle" in json_data:
+        json_data = json_data["puzzle"]
+    clean_json =  json.dumps(json_data)
 
-    puzzle = Puzzle.from_json(json_text)
+    puzzle = Puzzle.from_json(clean_json)
     print(f"Building graph from {json_path}...")
-    graph = constructive_bfs(puzzle, json_text) 
+    graph = constructive_bfs(puzzle, clean_json) 
 
     input_path = Path(json_path) 
 
