@@ -35,7 +35,7 @@ def evaluate_shortest_distance(graph: gt.Graph, graph_name: str) -> int:
 
 def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     """
-    Evaluates the proportion of traps (dead ends) and the mean ramification factor. 
+    Evaluates the proportion of traps (dead ends) and the mean ramification factor (). 
     Uses arrays to speed up the process
     """
     total_vertices = graph.num_vertices()
@@ -44,21 +44,22 @@ def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     
     out_degrees = graph.degree_property_map("out").a
     
-    # 1. Callejones sin salida (Nodos donde solo puedes deshacer el movimiento)
+    #check the amount of dead_ends
     dead_ends = (out_degrees == 1).sum()
     proportion_dead_ends = float(dead_ends / total_vertices)
     
-    # 2. Factor de Ramificación (Opciones medias en cruces)
-    nodos_con_opciones = out_degrees[out_degrees > 1]
+    #check the levels of ramifications
+    nodes_with_options = out_degrees[out_degrees > 1]
     
-    if len(nodos_con_opciones) > 0:
-        rama_media = nodos_con_opciones.mean() 
-        # Normalizamos dividiendo por un factor teórico (ej. 5.0) para que no pase de 1.0
-        rama_score = min(1.0, float(rama_media / 5.0))
+    if len(nodes_with_options) > 0:
+        nean_branch = nodes_with_options.mean() 
+        #devide by 5.0 to give a standard
+        branch_score = min(1.0, float(nean_branch / 5.0))
+
     else:
-        rama_score = 0.0
+        branch_score = 0.0
         
-    return proportion_dead_ends, rama_score
+    return proportion_dead_ends, branch_score
 
 def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     """
@@ -69,33 +70,31 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     if total_vertices < 3:
         return 0.0
     
-    # LA CLAVE MATEMÁTICA: Calculamos el máximo teórico de caminos posibles
-    max_posible_paths  = (total_vertices - 1) * (total_vertices - 2)
+    #The theoretical maximum of posible paths
+    max_posible_paths  = (total_vertices - 1) * (total_vertices - 2) // 2
     
-    # 1. CASO GRAFOS PEQUEÑOS
+    #for tiny graphs
     if total_vertices <= 100:
         # norm=False nos asegura que devuelve el recuento crudo, no porcentajes extraños
         vertex_betweenness, _ = gt.betweenness(graph, norm=False)
         maxim_peak = float(vertex_betweenness.a.max())
         return min(1.0, maxim_peak / max_posible_paths )
 
-    # 2. CASO GRAFOS GRANDES: Aproximación por Montecarlo
+    #case for bigger graphs
     num_pivots = 100
     suma_maximos = 0.0
     
     for _ in range(iterations):
         pivots = random.sample(range(total_vertices), num_pivots)
-        # CRÍTICO: norm=False para que el estimador no se confunda
+        # norm=False lets to normalize ourselves the parameter
         vertex_betweenness, _ = gt.betweenness(graph, pivots=pivots, norm=False)
         suma_maximos += vertex_betweenness.a.max()
         
     promedio_centralidad = suma_maximos / iterations
     
-    # 3. NORMALIZACIÓN MANUAL
-    # Convertimos los 209 mil millones en un porcentaje (ej. 0.83)
+    #normalization
     score_normalizado = promedio_centralidad / max_posible_paths 
     
-    # Seguro de vida por si la aproximación se pasa un poquito del 100%
     return float(min(1.0, score_normalizado))
 
 def proportion_goals(graph: gt.Graph) -> float:
@@ -128,8 +127,9 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     #normalization
     
     path_score = min(1.0, total_distance / (math.log(num_vertices) * 2)) 
+    #divide by log for reducing the importance on small differences of sizes bewteen graphs
     
-    score_metas_escasas = 1.0 - proportion_of_goal
+    amount_of_goals_indicator = 1.0 - proportion_of_goal
 
 
     path_weight = 1.5
@@ -143,7 +143,7 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
         (dead_ends * laberinth_weight) +
         (branching_score * branching_weight) +
         (bottleneck * centralization_weight) +
-        (score_metas_escasas * presition_weight)
+        (amount_of_goals_indicator * presition_weight)
     )
 
     return round(interest_score, 2)
