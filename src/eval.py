@@ -33,19 +33,32 @@ def evaluate_shortest_distance(graph: gt.Graph, graph_name: str) -> int:
     shortest_solution = get_solution(graph, graph_name)
     return len(shortest_solution)
 
-def evaluate_paths(graph: gt.Graph) -> float:
+def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     """
-    Calculates the value of "dead ends"
+    Evalúa la proporción de trampas (dead ends) y el factor de ramificación medio.
+    Utiliza arrays nativos de C/NumPy (.a) para máxima velocidad.
     """
     total_vertices = graph.num_vertices()
     if total_vertices == 0:
-        return 0.0
+        return 0.0, 0.0
     
-    out_degrees = graph.get_out_degrees(graph.get_vertices())
-
-    dead_ends = sum(out_degrees == 1)
-
-    return dead_ends /total_vertices
+    out_degrees = graph.degree_property_map("out").a
+    
+    # 1. Callejones sin salida (Nodos donde solo puedes deshacer el movimiento)
+    dead_ends = (out_degrees == 1).sum()
+    proportion_dead_ends = float(dead_ends / total_vertices)
+    
+    # 2. Factor de Ramificación (Opciones medias en cruces)
+    nodos_con_opciones = out_degrees[out_degrees > 1]
+    
+    if len(nodos_con_opciones) > 0:
+        rama_media = nodos_con_opciones.mean() 
+        # Normalizamos dividiendo por un factor teórico (ej. 5.0) para que no pase de 1.0
+        rama_score = min(1.0, float(rama_media / 5.0))
+    else:
+        rama_score = 0.0
+        
+    return proportion_dead_ends, rama_score
 
 def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     """
@@ -69,7 +82,7 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     for _ in range(iterations):
         pivots = random.sample(range(total_vertices), num_pivots)
         vertex_betweenness, _ = gt.betweenness(graph, pivots=pivots)
-        suma_maximos += max(vertex_betweenness.a)
+        suma_maximos += vertex_betweenness.a.max()
         
     promedio_centralidad = suma_maximos / iterations
     
@@ -84,7 +97,7 @@ def proportion_goals(graph: gt.Graph) -> float:
     if total_vertices == 0:
         return 0.0
     
-    total_goals = sum(graph.vp["is_goal"].a)
+    total_goals = graph.vp["is_goal"].a.sum()
    
     return float(total_goals/total_vertices)
 
@@ -98,7 +111,7 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
 
     # Getting the raw values
     total_distance = evaluate_shortest_distance(graph, graph_name)
-    dead_ends = evaluate_paths(graph)
+    dead_ends, branching_score = evaluate_topology(graph)
     bottleneck = evaluate_centrality(graph) 
     proportion_of_goal = proportion_goals(graph)
 
@@ -110,19 +123,19 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
 
 
     path_weight = 1.5
-    laberinth_weight = 1.0
+    laberinth_weight = 0.5
+    branching_weight = 1.0
     centralization_weight = 2.0
     presition_weight = 0.5
 
-    # Final step
     interest_score = (
         (path_score * path_weight) +
         (dead_ends * laberinth_weight) +
+        (branching_score * branching_weight) +
         (bottleneck * centralization_weight) +
         (score_metas_escasas * presition_weight)
     )
 
-    # Redondeamos a 2 decimales para que se vea limpio (ej: 4.25)
     return round(interest_score, 2)
 
 
