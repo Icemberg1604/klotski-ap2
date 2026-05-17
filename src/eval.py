@@ -63,17 +63,21 @@ def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
 def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     """
     Calculates the bottle-necks of the graph using a fast pivot approximation.
-    Returns the value with the biggest centrality. Centrality basically measures the overall flux of 
-    one vertex to every other one, meaning that there is a particular state you need to achieve to access every other state
+    Returns the normalized value (0.0 to 1.0).
     """
     total_vertices = graph.num_vertices()
     if total_vertices < 3:
         return 0.0
     
-    # 1. CASO GRAFOS PEQUEÑOS: Cálculo exacto de un solo impacto
+    # LA CLAVE MATEMÁTICA: Calculamos el máximo teórico de caminos posibles
+    max_posible_paths  = (total_vertices - 1) * (total_vertices - 2)
+    
+    # 1. CASO GRAFOS PEQUEÑOS
     if total_vertices <= 100:
-        vertex_betweenness, _ = gt.betweenness(graph)
-        return float(max(vertex_betweenness.a))
+        # norm=False nos asegura que devuelve el recuento crudo, no porcentajes extraños
+        vertex_betweenness, _ = gt.betweenness(graph, norm=False)
+        maxim_peak = float(vertex_betweenness.a.max())
+        return min(1.0, maxim_peak / max_posible_paths )
 
     # 2. CASO GRAFOS GRANDES: Aproximación por Montecarlo
     num_pivots = 100
@@ -81,12 +85,18 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     
     for _ in range(iterations):
         pivots = random.sample(range(total_vertices), num_pivots)
-        vertex_betweenness, _ = gt.betweenness(graph, pivots=pivots)
+        # CRÍTICO: norm=False para que el estimador no se confunda
+        vertex_betweenness, _ = gt.betweenness(graph, pivots=pivots, norm=False)
         suma_maximos += vertex_betweenness.a.max()
         
     promedio_centralidad = suma_maximos / iterations
     
-    return float(promedio_centralidad)
+    # 3. NORMALIZACIÓN MANUAL
+    # Convertimos los 209 mil millones en un porcentaje (ej. 0.83)
+    score_normalizado = promedio_centralidad / max_posible_paths 
+    
+    # Seguro de vida por si la aproximación se pasa un poquito del 100%
+    return float(min(1.0, score_normalizado))
 
 def proportion_goals(graph: gt.Graph) -> float:
     """
@@ -125,7 +135,7 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     path_weight = 1.5
     laberinth_weight = 0.5
     branching_weight = 1.0
-    centralization_weight = 2.0
+    centralization_weight = 1.5
     presition_weight = 0.5
 
     interest_score = (
@@ -142,7 +152,7 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
 def main() -> None:
     try:
         graph_path_str = sys.argv[1]
-    except:
+    except IndexError:
         raise Exception("Use: python ./src/eval.py ./graphs/<puzzle_graph>.graphml")
     
     graph_path = Path(graph_path_str)
