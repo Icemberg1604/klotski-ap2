@@ -50,7 +50,8 @@ def evaluate_paths(graph: gt.Graph) -> float:
 def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     """
     Calculates the bottle-necks of the graph using a fast pivot approximation.
-    Returns the value with the biggest centrality.
+    Returns the value with the biggest centrality. Centrality basically measures the overall flux of 
+    one vertex to every other one, meaning that there is a particular state you need to achieve to access every other state
     """
     total_vertices = graph.num_vertices()
     if total_vertices < 3:
@@ -129,9 +130,13 @@ def main() -> None:
     try:
         graph_path_str = sys.argv[1]
     except:
-        raise Exception("Use: pyhton ./src/eval.py ./graphs/<puzzle_graph>.graphml")
+        raise Exception("Use: python ./src/eval.py ./graphs/<puzzle_graph>.graphml")
     
     graph_path = Path(graph_path_str)
+
+    if not graph_path.is_file():
+        raise FileNotFoundError(f"Error: No se encontró el archivo {graph_path}")
+    
     graph_name = str(graph_path.stem)
     puzzle_graph = gt.load_graph(graph_path_str, fmt="graphml")
     score = puzzle_evaluation(puzzle_graph, graph_name)
