@@ -35,8 +35,8 @@ def evaluate_shortest_distance(graph: gt.Graph, graph_name: str) -> int:
 
 def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     """
-    Evalúa la proporción de trampas (dead ends) y el factor de ramificación medio.
-    Utiliza arrays nativos de C/NumPy (.a) para máxima velocidad.
+    Evaluates the proportion of traps (dead ends) and the mean ramification factor. 
+    Uses arrays to speed up the process
     """
     total_vertices = graph.num_vertices()
     if total_vertices == 0:
