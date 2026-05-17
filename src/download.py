@@ -32,6 +32,9 @@ def download_puzzle(puzzle_id: str, save_folder="puzzles", name = "") -> None:
     file_path = os.path.join(save_folder, f"{name}.json")
 
     with open(file_path, "w") as f:
+        if "puzzle" in puzzle_data:
+            puzzle_data = puzzle_data["puzzle"]
+            
         json.dump(puzzle_data, f, indent=2)
         
     print(f"Puzzle {puzzle_id} downloaded succesfully \n")
