@@ -52,9 +52,9 @@ def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     nodes_with_options = out_degrees[out_degrees > 1]
     
     if len(nodes_with_options) > 0:
-        nean_branch = nodes_with_options.mean() 
+        mean_branch = nodes_with_options.mean() 
         #devide by 5.0 to give a standard
-        branch_score = min(1.0, float(nean_branch / 5.0))
+        branch_score = min(1.0, float(mean_branch / 5.0))
 
     else:
         branch_score = 0.0
@@ -132,10 +132,10 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     amount_of_goals_indicator = 1.0 - proportion_of_goal
 
 
-    path_weight = 1.5
+    path_weight = 2.0
     laberinth_weight = 0.5
     branching_weight = 1.0
-    centralization_weight = 1.5
+    centralization_weight = 1.0
     presition_weight = 0.5
 
     interest_score = (
