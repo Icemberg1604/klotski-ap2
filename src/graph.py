@@ -10,7 +10,6 @@ from pathlib import Path
 Coord: TypeAlias = tuple[int, int]
 StateKey: TypeAlias = tuple[Coord,...]
 
-
 def equiv_shapes(puzzle: Puzzle) -> tuple[tuple[int,...],...]:
     
     goal_pieces: set[int] = {goal[0] for goal in puzzle.goals}
@@ -71,6 +70,7 @@ def create_empty_graph(json_str: str) -> gt.Graph:
 
     #g_property
     g_puzzle = g.new_graph_property("string")
+    g_solution  = g.new_graph_property("string")
     
     # We save this properties in the graph, so we can access to them later
     g.vertex_properties["is_start"] = v_is_start
@@ -81,64 +81,126 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     g.edge_properties["direction"] = e_move_dir
     
     g.graph_properties["puzzle"] = g_puzzle
-
+    g.graph_properties["solution"] = g_solution
     g.graph_properties["puzzle"] = json_str
  
     return g
 
-def constructive_bfs(puzzle: Puzzle, general_json: str) -> gt.Graph:
 
-    states_graph = create_empty_graph(general_json) #creates a graph with ids for its state, and if it is a goal vertex or not.
-
-    visited: dict[StateKey, Any] = {}  #type: ignore
-    queue: deque[State] = deque()
-    same_shape_pieces = equiv_shapes(puzzle=puzzle)
-
-    def evaluate(state: State) -> Any:
-        canonical_state = get_canonical_position(state, same_shape_pieces)
-        if canonical_state not in visited:
-            v = states_graph.add_vertex()
-            visited[canonical_state] = v
-
-            states_graph.vp["is_goal"][v] = lg.is_goal(puzzle, state)
-            states_graph.vp["state"][v] = state.to_json()
-            
-            queue.append(state)
-
-        return visited[canonical_state]
+class PuzzleGraphBuilder:
+    """
+    Class made for building the whole graph and finding a 
+    """
+    puzzle: Puzzle
+    graph: gt.Graph
     
-    v_start = evaluate(puzzle.start)
-    states_graph.vp["is_start"][v_start] = True
-   
-    while queue:
+    visited: dict[StateKey, Any] #Saves the value[vertex] of the key[state]
+    came_from: dict[Any, Any] #saves the vertex[key] that leaded to the vertex[value]
+    queue: deque[State] #queue for saving the next states of the puzzle to be processed
 
-        print(f"Remaining on queue: {len(queue)}")
-        print(f"Nodes on graph: {states_graph.num_vertices()}")
-        v_state = queue.popleft()
-        possible_moves = lg.possible_moves(puzzle, v_state)
-        v_curr_canonical = get_canonical_position(v_state, same_shape_pieces)
-        v_curr_id = visited[v_curr_canonical]
+    v_start: int | None
+    solution_found: bool
 
-        for move in possible_moves:
-            u_state = lg.apply_move(puzzle, v_state, move)
-            v_next_id = evaluate(u_state)
+    def __init__(self, puzzle: Puzzle, general_json: str) -> None:
 
-            if not states_graph.edge(v_curr_id, v_next_id):
-                edge = states_graph.add_edge(v_curr_id, v_next_id)
+        self.puzzle = puzzle
+        self.graph = create_empty_graph(general_json)
+        self.same_shape_pieces = equiv_shapes(puzzle)
 
-                p_idx, direction, _ = move
-                states_graph.ep["piece"][edge] = p_idx
-                states_graph.ep["direction"][edge] = direction
+        self.visited = {}
+        self.came_from = {}
+        self.queue = deque()
 
-    return states_graph 
+        self.v_start = None
+        self.solution_found = False
 
+    def _register_state(self, state: State) -> tuple[int, bool]:
+        """
+        If a vertex has not been visited, saves the information of it in the graph
+        """
+        canonical_state = get_canonical_position(state, self.same_shape_pieces)
+        is_new = canonical_state not in self.visited
+        
+        if is_new:
+            v = self.graph.add_vertex()
+            self.visited[canonical_state] = v
+            self.graph.vp["is_goal"][v] = lg.is_goal(self.puzzle, state)
+            self.graph.vp["state"][v] = state.to_json()
+            self.queue.append(state)
+
+        return self.visited[canonical_state], is_new
+        
+    def _reconstruct_solution(self, end_node) -> None:
+        """
+        Once we found the solution, recreates all the path from the 
+        """
+        self.solution_found = True
+        path = []
+        curr_node = end_node
+        
+        while curr_node != self.v_start:
+            parent_node, piece, dir_str = self.came_from[curr_node]
+            path.append([piece, dir_str])
+            curr_node = parent_node
+        
+        path.reverse()
+        self.graph.graph_properties["solution"] = json.dumps(path)
+
+
+    def build(self) -> gt.Graph:
+        """
+        Main loop of the BFS. It creates the puzzle's graph by expanding it and saves the solution in gp["solution]
+        """
+
+        self.v_start, _ = self._register_state(self.puzzle.start)
+        self.graph.vp["is_start"][self.v_start] = True
+        
+        if self.graph.vp["is_goal"][self.v_start]:
+            self.graph.graph_properties["solution"] = json.dumps([])
+            self.solution_found = True
+
+        while self.queue:
+
+            print(len(self.queue))
+            print(self.graph.num_vertices())
+
+            v_state = self.queue.popleft()
+            possible_moves = lg.possible_moves(self.puzzle, v_state)
+            v_curr_canonical = get_canonical_position(v_state, self.same_shape_pieces)
+            v_curr_id = self.visited[v_curr_canonical]
+
+            #We handle the scenarios for every possible move from our starting v_state
+            for move in possible_moves:
+                u_state = lg.apply_move(self.puzzle, v_state, move)
+                piece_idx, direction, _ = move
+                v_next_id, is_new = self._register_state(u_state)
+
+                if not self.solution_found and is_new:
+                    #we save the route we came from
+                    self.came_from[v_next_id] = (v_curr_id, piece_idx, direction)
+ 
+                    if self.graph.vp["is_goal"][v_next_id]: 
+                        self._reconstruct_solution(v_next_id)
+                        self.came_from.clear()
+
+                #we create the conections between nodes
+                if not self.graph.edge(v_curr_id, v_next_id):
+                    edge = self.graph.add_edge(v_curr_id, v_next_id)
+                    self.graph.ep["piece"][edge] = piece_idx
+                    self.graph.ep["direction"][edge] = direction
+
+        if not self.solution_found:
+            self.graph.graph_properties["solution"] = json.dumps(None)
+
+        return self.graph
+    
 def main() -> None:
 
     try:
         json_path = sys.argv[1]
         
     except IndexError:
-        raise Exception("No valid json path. Use: python src/graph.py puzzles/name_puzzle.json")
+        raise Exception("No valid json path. Use: python src/graph.py puzzles/<name_puzzle>.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
         json_data = json.load(file)
@@ -150,7 +212,9 @@ def main() -> None:
 
     puzzle = Puzzle.from_json(clean_json)
     print(f"Building graph from {json_path}...")
-    graph = constructive_bfs(puzzle, clean_json) 
+
+    builder =  PuzzleGraphBuilder(puzzle, clean_json)
+    graph = builder.build()
 
     input_path = Path(json_path) 
 

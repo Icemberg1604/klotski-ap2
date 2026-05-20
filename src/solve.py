@@ -1,7 +1,6 @@
 import graph_tool.all as gt
 import sys
 from pathlib import Path
-from collections import deque
 from typing import TypeAlias
 import json
 
@@ -9,32 +8,19 @@ SimpleMove: TypeAlias = tuple[int, str]
 
 
 def solution_bfs(graph: gt.Graph) -> list[SimpleMove]:
-    start_vertex = gt.find_vertex(graph, graph.vp["is_start"], True)[0]
-    goal_nodes = gt.find_vertex(graph,  graph.vp["is_goal"], True)
 
-    if not goal_nodes:
-        raise Exception("Goal vertices not found")
+    json_str = graph.gp["solution"]
     
+    #from the json property, we load the solution path
+    moves = json.loads(json_str)
     
-    if graph.vp["is_goal"][start_vertex]:
+
+    #if there was no solution
+    if moves is None:
         return []
-    
-    node_queue = deque([(start_vertex, [])])
-    visited = {start_vertex}
-    
-    while node_queue:
-        current_v, current_path = node_queue.popleft()
-        for edge in current_v.out_edges():
-            _, destiny_node = edge
         
-            if destiny_node not in visited:
-                if graph.vp["is_goal"][destiny_node]:
-                    final_path_edges = current_path + [edge]
-                    return [(graph.ep["piece"][e], graph.ep["direction"][e]) for e in final_path_edges]
-                visited.add(destiny_node)
-                node_queue.append((destiny_node, current_path + [edge]))
-    
-    raise Exception("There is no path to the goal in this graph")
+    #we get the tuple version of this
+    return [(piece, direction) for piece, direction in moves]
 
 def main() -> None:
     

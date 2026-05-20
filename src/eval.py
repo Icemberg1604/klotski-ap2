@@ -97,18 +97,6 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
     
     return float(min(1.0, score_normalizado))
 
-def proportion_goals(graph: gt.Graph) -> float:
-    """
-    Gets the proportion of the amount of goals in comparison of the amount of vertices
-    """
-    total_vertices = graph.num_vertices()
-
-    if total_vertices == 0:
-        return 0.0
-    
-    total_goals = graph.vp["is_goal"].a.sum()
-   
-    return float(total_goals/total_vertices)
 
 
 
@@ -122,28 +110,27 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     total_distance = evaluate_shortest_distance(graph, graph_name)
     dead_ends, branching_score = evaluate_topology(graph)
     bottleneck = evaluate_centrality(graph) 
-    proportion_of_goal = proportion_goals(graph)
+    #proportion_of_goal = proportion_goals(graph)
 
     #normalization
     
     path_score = min(1.0, total_distance / (math.log(num_vertices) * 2)) 
     #divide by log for reducing the importance on small differences of sizes bewteen graphs
     
-    amount_of_goals_indicator = 1.0 - proportion_of_goal
+ 
 
 
-    path_weight = 2.0
-    laberinth_weight = 0.5
+    dif_path_weight = 2.0
+    dead_ends_weight = 0.5
     branching_weight = 1.0
-    centralization_weight = 1.0
-    presition_weight = 0.5
+    bottleneck_weight = 1.5
+    #amount_goals_weight = 0
 
     interest_score = (
-        (path_score * path_weight) +
-        (dead_ends * laberinth_weight) +
+        (path_score * dif_path_weight) +
+        (dead_ends * dead_ends_weight) +
         (branching_score * branching_weight) +
-        (bottleneck * centralization_weight) +
-        (amount_of_goals_indicator * presition_weight)
+        (bottleneck * bottleneck_weight)
     )
 
     return round(interest_score, 2)
