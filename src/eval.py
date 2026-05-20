@@ -6,9 +6,10 @@ from solve import solution_bfs, SimpleMove
 import math
 import random
 
-def get_solution(graph: gt.Graph, graph_name: str) -> list[SimpleMove]:
+def get_solution(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) -> list[SimpleMove]:
     """
-    Busca la solución en la carpeta json-solutions. Si se encuentra, se importa. Si no se encuentra, se crea.
+    Gets the solution path from the graph. If the file is already created, it uses it. Else, it searches for the 
+    solution of the graph. If save_to_disk is True, it saves this solution on a json-solutions directory.
     """
     sol_dir = Path("json-solutions")
     sol_path = sol_dir / f"{graph_name}.sol.json"
@@ -18,20 +19,21 @@ def get_solution(graph: gt.Graph, graph_name: str) -> list[SimpleMove]:
             return json.load(file)
         
     else:
-        movememts = solution_bfs(graph)
-        sol_dir.mkdir(parents=True, exist_ok=True)
-
-        with open(sol_path, mode="w", encoding="utf-8") as f:
-            json.dump(movememts, f, indent=4)
+        movements = solution_bfs(graph)
         
-        return movememts
+        # Solo guardamos si nos dan permiso explícito
+        if save_to_disk:
+            sol_dir.mkdir(parents=True, exist_ok=True)
+            with open(sol_path, mode="w", encoding="utf-8") as f:
+                json.dump(movements, f, indent=4)
+
+        return movements
     
-def evaluate_shortest_distance(graph: gt.Graph, graph_name: str) -> int:
+def evaluate_shortest_distance(graph: gt.Graph, graph_name: str, save_to_disk: bool) -> int:
     """
     Returns the lenght of the solution
     """
-    shortest_solution = get_solution(graph, graph_name)
-    return len(shortest_solution)
+    return len(get_solution(graph, graph_name, save_to_disk))
 
 def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     """
@@ -100,14 +102,14 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
 
 
 
-def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
+def puzzle_evaluation(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) -> float:
 
     num_vertices = graph.num_vertices()
     if num_vertices < 2: 
         return 0.0
 
     # Getting the raw values
-    total_distance = evaluate_shortest_distance(graph, graph_name)
+    total_distance = evaluate_shortest_distance(graph, graph_name, save_to_disk)
     dead_ends, branching_score = evaluate_topology(graph)
     bottleneck = evaluate_centrality(graph) 
     #proportion_of_goal = proportion_goals(graph)
