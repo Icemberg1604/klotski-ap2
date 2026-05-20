@@ -7,8 +7,11 @@ import sys
 from pathlib import Path
 import graph_tool.all as gt  # type: ignore
 
-# Import your evaluation logic
+# Import your evaluation and partner's generation logic
 from eval import puzzle_evaluation
+import download
+from puzzle import Puzzle
+from graph import PuzzleGraphBuilder
 
 
 def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
@@ -17,10 +20,10 @@ def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
     """
     url = f"https://klotski.pauek.dev/api/puzzles/{puzzle_id}/votes"
 
-    # Package the rating into a JSON payload.
-    data_payload = json.dumps({"vote": rating}).encode("utf-8")
+    # Enforce integer rounding as required by the server API
+    integer_stars = int(round(rating))
+    data_payload = json.dumps({"stars": integer_stars}).encode("utf-8")
 
-    # Build the HTTP request with the necessary headers
     request = urllib.request.Request(
         url,
         data=data_payload,
@@ -31,10 +34,9 @@ def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
         },
     )
 
-    print(f"Sending rating of {rating} stars for puzzle '{puzzle_id}'...")
+    print(f"Sending rating of {integer_stars} stars for puzzle '{puzzle_id}'...")
 
     try:
-        # Fire the request
         with urllib.request.urlopen(request) as response:
             if response.status in [200, 201]:
                 print(f"✅ Success! Rating accepted by the server.")
@@ -43,45 +45,91 @@ def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
 
     except urllib.error.HTTPError as e:
         print(f"❌ HTTP Error: {e.code} - {e.reason}")
-        # If you get a 401, it means your token is invalid or missing.
-        # If you get a 400, the server didn't like the JSON format.
+        error_msg = e.read().decode("utf-8")
+        if error_msg:
+            print(f"Server details: {error_msg}")
     except Exception as e:
         print(f"❌ An unexpected error occurred: {e}")
 
 
 def main() -> None:
-    # Expecting: python src/rate.py <puzzle_id> <path_to_graphml>
-    if len(sys.argv) != 3:
-        print("Usage: python src/rate.py <puzzle_id> <path_to_graphml>")
-        sys.exit(1)
-
-    puzzle_id = sys.argv[1]
-    graph_path_str = sys.argv[2]
-
-    # 1. Load the graph
-    graph_path = Path(graph_path_str)
-    if not graph_path.is_file():
-        print(f"Error: Could not find the file {graph_path}")
-        sys.exit(1)
-
-    print(f"Loading graph {graph_path.name}...")
-    puzzle_graph = gt.load_graph(str(graph_path), fmt="graphml")
-
-    # 2. Calculate the score
-    raw_score = puzzle_evaluation(puzzle_graph, graph_path.stem)
-    final_score = max(0.0, min(5.0, raw_score))
-
-    # 3. SECURELY LOAD THE TOKEN
+    # 1. SECURELY LOAD THE TOKEN
     load_dotenv()
     MY_TOKEN = os.getenv("KLOTSKI_TOKEN")
 
-    # Fail gracefully if the token is missing
     if not MY_TOKEN:
         print("❌ Error: KLOTSKI_TOKEN environment variable is missing.")
         print("Please ensure you have a .env file with KLOTSKI_TOKEN=your_token")
         sys.exit(1)
 
-    # 4. Submit to the API
+    args_count = len(sys.argv)
+
+    # Mode 1: Fully Manual (ID and local .graphml file provided)
+    if args_count == 3:
+        puzzle_id = sys.argv[1]
+        graph_path_str = sys.argv[2]
+
+        graph_path = Path(graph_path_str)
+        if not graph_path.is_file():
+            print(f"Error: Could not find the file {graph_path}")
+            sys.exit(1)
+
+        print(f"Loading graph {graph_path.name} from disk...")
+        puzzle_graph = gt.load_graph(str(graph_path), fmt="graphml")
+
+    # Mode 2 & 3: Dynamic Fetching (API handles the graph in memory)
+    elif args_count <= 2:
+        if args_count == 2:
+            # Mode 2: Only ID provided
+            puzzle_id = sys.argv[1]
+            print(f"Fetching specific puzzle '{puzzle_id}' from the repository...")
+        else:
+            # Mode 3: No arguments provided (Fallback to Top Rated)
+            print("No arguments provided. Fetching the #1 Top Rated puzzle...")
+            try:
+                puzzle_list = download.get_puzzles()
+                # Safely extract the first ID, whether it's a string or dict
+                top_puzzle = puzzle_list[0]
+                puzzle_id = (
+                    top_puzzle["id"] if isinstance(top_puzzle, dict) else top_puzzle
+                )
+                print(f"Top puzzle found: {puzzle_id}")
+            except Exception as e:
+                print(f"❌ Failed to fetch the leaderboard: {e}")
+                sys.exit(1)
+
+        # Build the graph in-memory using the downloaded JSON
+        try:
+            download.download_puzzle(puzzle_id, save_folder="puzzles", name=puzzle_id)
+            json_path = Path(f"puzzles/{puzzle_id}.json")
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                puzzle_data = json.load(f)
+
+            clean_json = json.dumps(puzzle_data)
+
+            print("Building graph space in memory...")
+            puz = Puzzle.from_json(clean_json)
+            builder = PuzzleGraphBuilder(puz, clean_json)
+            puzzle_graph = builder.build()
+
+        except Exception as e:
+            print(f"❌ Failed to process puzzle '{puzzle_id}': {e}")
+            sys.exit(1)
+
+    else:
+        # Too many arguments
+        print("Usage Errors. Supported commands:")
+        print("  python src/rate.py <puzzle_id> <path_to_graphml>  # Local graph")
+        print("  python src/rate.py <puzzle_id>                    # Fetch by ID")
+        print("  python src/rate.py                                # Fetch Top Rated")
+        sys.exit(1)
+
+    # 4. Calculate the score and submit
+    print("Calculating heuristic score...")
+    raw_score = puzzle_evaluation(puzzle_graph, puzzle_id)
+    final_score = max(0.0, min(5.0, raw_score))
+
     submit_rating(puzzle_id, final_score, MY_TOKEN)
 
 
