@@ -5,10 +5,13 @@ import json
 from solve import solution_bfs, SimpleMove
 import math
 import random
+from graph import build_graf_from_json, save_graph
+import json
 
-def get_solution(graph: gt.Graph, graph_name: str) -> list[SimpleMove]:
+def get_solution(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) -> list[SimpleMove]:
     """
-    Busca la solución en la carpeta json-solutions. Si se encuentra, se importa. Si no se encuentra, se crea.
+    Gets the solution path from the graph. If the file is already created, it uses it. Else, it searches for the 
+    solution of the graph. If save_to_disk is True, it saves this solution on a json-solutions directory.
     """
     sol_dir = Path("json-solutions")
     sol_path = sol_dir / f"{graph_name}.sol.json"
@@ -18,20 +21,21 @@ def get_solution(graph: gt.Graph, graph_name: str) -> list[SimpleMove]:
             return json.load(file)
         
     else:
-        movememts = solution_bfs(graph)
-        sol_dir.mkdir(parents=True, exist_ok=True)
-
-        with open(sol_path, mode="w", encoding="utf-8") as f:
-            json.dump(movememts, f, indent=4)
+        movements = solution_bfs(graph)
         
-        return movememts
+        # Solo guardamos si nos dan permiso explícito
+        if save_to_disk:
+            sol_dir.mkdir(parents=True, exist_ok=True)
+            with open(sol_path, mode="w", encoding="utf-8") as f:
+                json.dump(movements, f, indent=4)
+
+        return movements
     
-def evaluate_shortest_distance(graph: gt.Graph, graph_name: str) -> int:
+def evaluate_shortest_distance(graph: gt.Graph, graph_name: str, save_to_disk: bool) -> int:
     """
     Returns the lenght of the solution
     """
-    shortest_solution = get_solution(graph, graph_name)
-    return len(shortest_solution)
+    return len(get_solution(graph, graph_name, save_to_disk))
 
 def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     """
@@ -100,14 +104,14 @@ def evaluate_centrality(graph: gt.Graph, iterations: int = 5) -> float:
 
 
 
-def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
+def puzzle_evaluation(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) -> float:
 
     num_vertices = graph.num_vertices()
     if num_vertices < 2: 
         return 0.0
 
     # Getting the raw values
-    total_distance = evaluate_shortest_distance(graph, graph_name)
+    total_distance = evaluate_shortest_distance(graph, graph_name, save_to_disk)
     dead_ends, branching_score = evaluate_topology(graph)
     bottleneck = evaluate_centrality(graph) 
     #proportion_of_goal = proportion_goals(graph)
@@ -119,12 +123,10 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     
  
 
-
     dif_path_weight = 2.0
     dead_ends_weight = 0.5
     branching_weight = 1.0
     bottleneck_weight = 1.5
-    #amount_goals_weight = 0
 
     interest_score = (
         (path_score * dif_path_weight) +
@@ -136,21 +138,46 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str) -> float:
     return round(interest_score, 2)
 
 
-def main() -> None:
-    try:
-        graph_path_str = sys.argv[1]
-    except IndexError:
-        raise Exception("Use: python ./src/eval.py ./graphs/<puzzle_graph>.graphml")
+def extract_graph(puzzle_path: Path) -> gt.Graph:
+    """
+    Tries to load the graph from the graphs file. If it is not found, 
+    it will create the graph, save it, and returns it.
+    """
+    graph_path = Path("graphs") / f"{puzzle_path.stem}.graphml"
     
-    graph_path = Path(graph_path_str)
+    if graph_path.is_file():
+        print(f"-> Loading graph from {graph_path}...")
+        return gt.load_graph(str(graph_path), fmt="graphml")
+    
+    print(f"-> Graph not found, creating one for {puzzle_path.name}...")
+    
+    with open(puzzle_path, mode='r', encoding='utf-8') as f:
+        json_str = f.read()
+        json_data = json.loads(json_str)
+        
+    graph = build_graf_from_json(json_data)
+    
+    save_graph(graph, str(puzzle_path))
+    
+    return graph
+    
 
-    if not graph_path.is_file():
-        raise FileNotFoundError(f"Error: No se encontró el archivo {graph_path}")
+
+def main() -> None:
+
+    try:
+        puzzle_path_str = sys.argv[1]
+
+    except IndexError:
+        raise Exception("Use: python ./src/eval.py ./puzzles/<puzzle>.json")
+
+
+    puzzle_path = Path(puzzle_path_str)
+    puzzle_name = str(puzzle_path.stem)
+    graph = extract_graph(puzzle_path)
+    score = puzzle_evaluation(graph, puzzle_name)
     
-    graph_name = str(graph_path.stem)
-    puzzle_graph = gt.load_graph(graph_path_str, fmt="graphml")
-    score = puzzle_evaluation(puzzle_graph, graph_name)
-    print(f"The score of {graph_name} is: {score}")
+    print(f"The score of {puzzle_name} is: {score}")
 
 if __name__ == '__main__':
     main()

@@ -82,6 +82,7 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     
     g.graph_properties["puzzle"] = g_puzzle
     g.graph_properties["solution"] = g_solution
+    
     g.graph_properties["puzzle"] = json_str
  
     return g
@@ -194,31 +195,27 @@ class PuzzleGraphBuilder:
 
         return self.graph
     
-def main() -> None:
+def build_graf_from_json(json_data)-> gt.Graph:
 
-    try:
-        json_path = sys.argv[1]
-        
-    except IndexError:
-        raise Exception("No valid json path. Use: python src/graph.py puzzles/<name_puzzle>.json")
-
-    with open(json_path, 'r', encoding='utf-8') as file:
-        json_data = json.load(file)
-
-    #Cleaning Json data
     if "puzzle" in json_data:
         json_data = json_data["puzzle"]
-    clean_json =  json.dumps(json_data)
 
+    clean_json =  json.dumps(json_data)
     puzzle = Puzzle.from_json(clean_json)
-    print(f"Building graph from {json_path}...")
+    print(f"Building graph...")
 
     builder =  PuzzleGraphBuilder(puzzle, clean_json)
-    graph = builder.build()
+    
 
+    return builder.build()
+
+
+def save_graph(graph: gt.Graph, json_path: str) -> None:
+    """
+    Saves the graph in the directory ./graphs while recieving the json_path as a str
+    """
+        # Define and create the output directory
     input_path = Path(json_path) 
-
-    # Define and create the output directory
     output_dir = Path("graphs")
     output_dir.mkdir(exist_ok=True)
 
@@ -227,6 +224,26 @@ def main() -> None:
 
     graph.save(str(out_path))
     print(f"Graph was succesfully saved in: {out_path}")
+    
+
+def main() -> None:
+    """
+    Saves the graph that corresponds to the puzzle
+    """
+
+    try:
+        json_path = sys.argv[1]
+
+    except IndexError:
+        raise Exception("No valid json path. Use: python src/graph.py puzzles/<name_puzzle>.json")
+
+    with open(json_path, 'r', encoding='utf-8') as file:
+        json_data = json.load(file)
+
+    graph = build_graf_from_json(json_data)
+    save_graph(graph, json_path)
+    
+    
 
 if __name__ == "__main__":
     main()
