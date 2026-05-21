@@ -1,4 +1,3 @@
-import json
 import random
 from puzzle import Puzzle, State, Piece, Coord # Reutilizando tus clases existentes
 import logic as lg

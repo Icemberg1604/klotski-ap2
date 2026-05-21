@@ -82,6 +82,7 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     
     g.graph_properties["puzzle"] = g_puzzle
     g.graph_properties["solution"] = g_solution
+    
     g.graph_properties["puzzle"] = json_str
  
     return g
@@ -194,7 +195,25 @@ class PuzzleGraphBuilder:
 
         return self.graph
     
+def build_graf_from_json(json_data)-> gt.Graph:
+
+    if "puzzle" in json_data:
+        json_data = json_data["puzzle"]
+
+    clean_json =  json.dumps(json_data)
+    puzzle = Puzzle.from_json(clean_json)
+    print(f"Building graph...")
+
+    builder =  PuzzleGraphBuilder(puzzle, clean_json)
+    
+
+    return builder.build()
+
+
 def main() -> None:
+    """
+    Saves the graph that corresponds to the puzzle
+    """
 
     try:
         json_path = sys.argv[1]
@@ -206,19 +225,10 @@ def main() -> None:
         json_data = json.load(file)
 
     #Cleaning Json data
-    if "puzzle" in json_data:
-        json_data = json_data["puzzle"]
-    clean_json =  json.dumps(json_data)
-
-    puzzle = Puzzle.from_json(clean_json)
-    print(f"Building graph from {json_path}...")
-
-    builder =  PuzzleGraphBuilder(puzzle, clean_json)
-    graph = builder.build()
-
-    input_path = Path(json_path) 
+    graph = build_graf_from_json(json_data)
 
     # Define and create the output directory
+    input_path = Path(json_path) 
     output_dir = Path("graphs")
     output_dir.mkdir(exist_ok=True)
 
