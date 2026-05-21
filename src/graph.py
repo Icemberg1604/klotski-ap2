@@ -233,14 +233,13 @@ def main() -> None:
 
     try:
         json_path = sys.argv[1]
-        
+
     except IndexError:
         raise Exception("No valid json path. Use: python src/graph.py puzzles/<name_puzzle>.json")
 
     with open(json_path, 'r', encoding='utf-8') as file:
         json_data = json.load(file)
 
-    #Cleaning Json data
     graph = build_graf_from_json(json_data)
     save_graph(graph, json_path)
     

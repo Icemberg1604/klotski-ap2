@@ -1,9 +1,12 @@
 import random
-from puzzle import Puzzle, State, Piece, Coord # Reutilizando tus clases existentes
+from puzzle import Puzzle, State, Piece, Coord 
 import logic as lg
-from eval import puzzle_evaluation # Tu juez implacable
-from graph import PuzzleGraphBuilder # Tu constructor de grafos optimizado
+from eval import puzzle_evaluation 
+from graph import PuzzleGraphBuilder 
 from typing import Optional
+from dataclasses import dataclass
+import graph_tool.all as gt
+import json
 
 
 class Canonicalizer:
@@ -89,145 +92,180 @@ class Canonicalizer:
             start=canon_state,
             goals=tuple(self.canon_goals)
         )
+    
+@dataclass
+class PuzzleConfig:
+    """Define las reglas estructurales para generar un puzzle."""
+    w: int
+    h: int
+    pieces: list[Piece]
+    goal_idx: int = 0
+    goal_pos: Coord = (1, 3) 
+    scramble_depth: int = 150
+
 
 class PuzzleGenerator:
-
     """
-    The Factory class for creating valid, scrambled Klotski puzzles.´
-    """
+    The Factory class for creating valid, scrambled Klotski puzzles."""
+    
     def __init__(self):
-        # Catalog of common normalized pieces
         self.BLOCK_2x2 = Piece.normalized([(0,0), (0,1), (1,0), (1,1)])
         self.BLOCK_1x2_V = Piece.normalized([(0,0), (0,1)])
+        self.BLOCK_1x2_H = Piece.normalized([(0,0), (1,0)])
         self.BLOCK_1x1 = Piece.normalized([(0,0)])
 
-    def _generate_random_positions(self, pieces: list[Piece], width: int, height: int, goal_idx: int, goal_pos: Coord) -> list[Coord]:
-        """
-        Generates random coordinates for all pieces, forcing the goal piece to its target.
-        """
-        posiciones = []
-        for i, _ in enumerate(pieces):
-            if i == goal_idx:
-                posiciones.append(goal_pos)
-            else:
-                posiciones.append((random.randint(0, width - 1), random.randint(0, height - 1)))
-        return posiciones
-
-    def _create_solved_state(self, width: int, height: int, pieces: list[Piece], goal_idx: int, goal_pos: Coord) -> tuple[Puzzle, State]:
-        """
-        Attempts to place all pieces in the board without collisions to create a solved state.
-        """
-
-        intentos = 0
-        while intentos < 10000:
-            posiciones = self._generate_random_positions(pieces, width, height, goal_idx, goal_pos)
+    def _choose_fitting_piece(self, remaining_space: int) -> tuple[Piece, int]:
+        opciones = [self.BLOCK_1x1]
+        if remaining_space >= 2:
+            opciones.extend([self.BLOCK_1x2_V, self.BLOCK_1x2_H]) # Incluida la horizontal aquí
             
-            try:
-                canonicalizer = Canonicalizer(
-                    w=width, h=height, walls=[], pieces=pieces, 
-                    start_positions=posiciones, goals=[(goal_idx, goal_pos)])
-                puzzle_temporal = canonicalizer.make_canonical()
-                
-                if lg.valid_placement(puzzle_temporal, puzzle_temporal.start):
-                    return puzzle_temporal, puzzle_temporal.start
-            except ValueError:
-                pass # Pieces out of bounds or colliding on initialization
-                
-            intentos += 1
-            
-        raise Exception("Impossible to fit the requested pieces in this board size.")
+        elegida = random.choice(opciones)
+        area_elegida = 1 if elegida == self.BLOCK_1x1 else 2
+        return elegida, area_elegida
 
-    def _scramble(self, puzzle: Puzzle, solved_state: State, depth: int) -> State:
-        """Walks backwards from the solved state taking random valid moves."""
-        current_state = solved_state
-        last_piece = -1
-
-        for _ in range(depth):
-            moves = lg.possible_moves(puzzle, current_state)
-            if not moves: break # The board is completely stuck
-            
-            valid_moves = [m for m in moves if m[0] != last_piece]
-            if not valid_moves: valid_moves = moves 
-
-            chosen_move = random.choice(valid_moves)
-            current_state = lg.apply_move(puzzle, current_state, chosen_move)
-            last_piece = chosen_move[0]
-
-        return current_state
-
-    def generate_single(self, w: int, h: int, piezas_plantilla: list[Piece], meta_inicial_idx: int, posicion_meta: Coord, depth: int = 100) -> Puzzle:
-        """Core workflow: Places pieces -> Scrambles them -> Formats back to Canonical."""
-        # 1. Generate Solved State
-        puzzle_resuelto, estado_resuelto = self._create_solved_state(w, h, piezas_plantilla, meta_inicial_idx, posicion_meta)
+    def _generate_random_template(self, w: int, h: int) -> list[Piece]:
+        target_area = (w * h) - 2
+        template = [self.BLOCK_2x2]
+        current_area = 4
         
-        # 2. Scramble
-        estado_desordenado = self._scramble(puzzle_resuelto, estado_resuelto, depth)
-        
-        # 3. Canonicalize the final scattered state
-        canonicalizer = Canonicalizer(
-            w=w, h=h, walls=[], pieces=list(puzzle_resuelto.pieces),
-            start_positions=list(estado_desordenado.positions),
-            goals=list(puzzle_resuelto.goals)
-        )
-        return canonicalizer.make_canonical()
+        while current_area < target_area:
+            remaining_space = target_area - current_area
+            nueva_pieza, area_nueva = self._choose_fitting_piece(remaining_space)
+            template.append(nueva_pieza)
+            current_area += area_nueva
+                
+        return template
+
+    def _can_piece_fit(self, tablero: list[list[bool]], piece: Piece, x: int, y: int, w: int, h: int) -> bool:
+        for dx, dy in piece.coords:
+            nx, ny = x + dx, y + dy
+            if nx >= w or ny >= h or tablero[nx][ny]:
+                return False
+        return True
+
+    def _mark_piece_on_board(self, tablero: list[list[bool]], piece: Piece, x: int, y: int) -> None:
+        for dx, dy in piece.coords:
+            tablero[x + dx][y + dy] = True
+
+    def _find_spot_and_place(self, tablero: list[list[bool]], piece: Piece, w: int, h: int) -> Coord:
+        for y in range(h):
+            for x in range(w):
+                if self._can_piece_fit(tablero, piece, x, y, w, h):
+                    self._mark_piece_on_board(tablero, piece, x, y)
+                    return (x, y)
+        raise Exception("Error algorítmico: La pieza no cabe en el tablero.")
     
+    def _create_solved_state_smart(self, config: PuzzleConfig) -> tuple[Puzzle, State]:
+        tablero = [[False for _ in range(config.h)] for _ in range(config.w)]
+        # El profesor asume State.positions como una tupla, así que la prepararemos así.
+        posiciones = [(-1, -1)] * len(config.pieces) # Inicializamos con basura
+        
+        meta_piece = config.pieces[config.goal_idx]
+        gx, gy = config.goal_pos
+        self._mark_piece_on_board(tablero, meta_piece, gx, gy)
+        posiciones[config.goal_idx] = (gx, gy)
+        
+        for idx, piece in enumerate(config.pieces):
+            if idx == config.goal_idx:
+                continue
+            pos = self._find_spot_and_place(tablero, piece, config.w, config.h)
+            posiciones[idx] = pos
 
+        canonicalizer = Canonicalizer(
+            w=config.w, h=config.h, walls=[], pieces=config.pieces, 
+            start_positions=posiciones, goals=[(config.goal_idx, config.goal_pos)]
+        )
+        puzzle = canonicalizer.make_canonical()
+        return puzzle, puzzle.start
 
+    def generate_seed(self, config: PuzzleConfig) -> Puzzle:
+        """Devuelve un puzzle en su estado resuelto (la semilla del grafo)."""
+        puzzle_resuelto, _ = self._create_solved_state_smart(config)
+        return puzzle_resuelto
 
+import graph_tool.all as gt
+
+def extract_hardest_puzzle_from_graph(seed_puzzle: Puzzle, graph: gt.Graph) -> Puzzle:
+    """
+    Encuentra el vértice más alejado del estado resuelto (nodo 0) 
+    y reconstruye el Puzzle con ese nuevo estado inicial.
+    """
+    # 1. Encontrar las distancias desde el estado resuelto (vértice 0)
+    nodo_resuelto = graph.vertex(0)
+    distancias = gt.shortest_distance(graph, source=nodo_resuelto)
+    
+    # 2. Convertir a array de numpy y limpiar inalcanzables
+    dist_array = distancias.a
+    dist_array[dist_array == 2147483647] = -1 
+    
+    # 3. Obtener el índice del nodo más alejado
+    furthest_node_idx = int(dist_array.argmax())
+    
+    # =================================================================
+    # AQUÍ RECUPERAS EL ESTADO DESDE TU GRAFO
+    # Asumo que guardas las coordenadas en una string JSON o tuplas 
+    # en una propiedad del vértice llamada "state_str"
+    # =================================================================
+    estado_crudo = json.loads(graph.vp["state"][graph.vertex(furthest_node_idx)])
+    nuevas_posiciones = [tuple(coord) for coord in estado_crudo]
+
+    # 4. Canonicalizar el nuevo puzzle "desordenado"
+    canonicalizer = Canonicalizer(
+        w=seed_puzzle.W, 
+        h=seed_puzzle.H, 
+        walls=list(seed_puzzle.walls), 
+        pieces=list(seed_puzzle.pieces), 
+        start_positions=nuevas_posiciones, 
+        goals=list(seed_puzzle.goals)
+    )
+    return canonicalizer.make_canonical()
 
 def generate_best_puzzle(amount: int) -> Optional[Puzzle]:
-    generator = PuzzleGenerator()
-    
+    generador = PuzzleGenerator()
     w, h = 4, 5
-    # PLANTILLA CORREGIDA: 18 casillas ocupadas, 2 vacías
-    plantilla = [
-        generator.BLOCK_2x2,
-        generator.BLOCK_1x2_V, generator.BLOCK_1x2_V, generator.BLOCK_1x2_V,
-        generator.BLOCK_1x1, generator.BLOCK_1x1, generator.BLOCK_1x1, generator.BLOCK_1x1
-    ]
     goal_idx = 0
     goal_pos = (1, 3)
 
     mejor_puzzle = None
     mejor_nota = -1.0
 
-    print(f"Generando y evaluando {amount} puzzles candidatos...")
+    print(f"Generando y evaluando {amount} universos candidatos...")
 
     for i in range(amount):
         try:
-            candidate = generator.generate_single(w, h, plantilla, goal_idx, goal_pos, depth=150)
+            plantilla = generador._generate_random_template(w, h)
+            config = PuzzleConfig(w=w, h=h, pieces=plantilla, goal_idx=goal_idx, goal_pos=goal_pos)
             
-            json_str = candidate.to_json()
-            builder = PuzzleGraphBuilder(candidate, json_str)
+            # 1. Creamos la semilla resuelta
+            seed = generador.generate_seed(config)
+            
+            # 2. Expandimos el universo completo
+            builder = PuzzleGraphBuilder(seed, seed.to_json())
             graph = builder.build()
             
-            # MAGIA: Le decimos al evaluador que NO guarde el archivo en disco
-            nota = puzzle_evaluation(graph, f"cantidate_{i}", save_to_disk=False)
-            
-            print(f"Candidate {i}: Note {nota}")
+            # 3. Evaluamos la calidad topológica de ese universo
+            # (Usamos save_to_disk=False para no ensuciar)
+            nota = puzzle_evaluation(graph, f"candidate_graph_{i}", save_to_disk=False)
+            print(f"Universo {i}: Nota {nota}")
 
+            # 4. Si el universo es prometedor, extraemos el nivel más difícil
             if nota > mejor_nota:
                 mejor_nota = nota
-                mejor_puzzle = candidate
+                mejor_puzzle = extract_hardest_puzzle_from_graph(seed, graph)
                 
         except Exception as e:
-            # Si un puzzle no logra encajar las piezas (intentos < 10000), 
-            # simplemente pasamos al siguiente sin que el programa crashee.
-            print(f"Candidato {i} descartado durante la creación: {e}")
+            print(f"Universo {i} descartado: {e}")
             
     print(f"\n¡Proceso terminado! El mejor puzzle sacó un {mejor_nota}.")
     return mejor_puzzle
 
 def main():
-    # Pedimos al programa que genere 20 tableros y se quede el más difícil
     puzzle_ganador = generate_best_puzzle(amount=20)
     
-    # Lo guardamos en disco
     if puzzle_ganador:
-        with open("graphs/generated_hardcore.json", mode="w", encoding="utf-8") as f:
+        with open("puzzles/generated_puzzle.json", mode="w", encoding="utf-8") as f:
             f.write(puzzle_ganador.to_json(indent=4))
-        print("Guardado exitosamente en graphs/generated_hardcore.json")
+        print("Guardado exitosamente en puzzles/generated_hardcore.json")
 
 if __name__ == "__main__":
     main()
-

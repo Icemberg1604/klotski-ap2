@@ -164,8 +164,10 @@ def extract_graph(puzzle_path: Path) -> gt.Graph:
 
 
 def main() -> None:
+
     try:
         puzzle_path_str = sys.argv[1]
+
     except IndexError:
         raise Exception("Use: python ./src/eval.py ./puzzles/<puzzle>.json")
 
@@ -174,6 +176,7 @@ def main() -> None:
     puzzle_name = str(puzzle_path.stem)
     graph = extract_graph(puzzle_path)
     score = puzzle_evaluation(graph, puzzle_name)
+    
     print(f"The score of {puzzle_name} is: {score}")
 
 if __name__ == '__main__':
