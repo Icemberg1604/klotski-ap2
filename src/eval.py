@@ -5,6 +5,8 @@ import json
 from solve import solution_bfs, SimpleMove
 import math
 import random
+from graph import build_graf_from_json, save_graph
+import json
 
 def get_solution(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) -> list[SimpleMove]:
     """
@@ -121,12 +123,10 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str, save_to_disk: bool = Tru
     
  
 
-
     dif_path_weight = 2.0
     dead_ends_weight = 0.5
     branching_weight = 1.0
     bottleneck_weight = 1.5
-    #amount_goals_weight = 0
 
     interest_score = (
         (path_score * dif_path_weight) +
@@ -138,21 +138,43 @@ def puzzle_evaluation(graph: gt.Graph, graph_name: str, save_to_disk: bool = Tru
     return round(interest_score, 2)
 
 
+def extract_graph(puzzle_path: Path) -> gt.Graph:
+    """
+    Tries to load the graph from the graphs file. If it is not found, 
+    it will create the graph, save it, and returns it.
+    """
+    graph_path = Path("graphs") / f"{puzzle_path.stem}.graphml"
+    
+    if graph_path.is_file():
+        print(f"-> Loading graph from {graph_path}...")
+        return gt.load_graph(str(graph_path), fmt="graphml")
+    
+    print(f"-> Graph not found, creating one for {puzzle_path.name}...")
+    
+    with open(puzzle_path, mode='r', encoding='utf-8') as f:
+        json_str = f.read()
+        json_data = json.loads(json_str)
+        
+    graph = build_graf_from_json(json_data)
+    
+    save_graph(graph, str(puzzle_path))
+    
+    return graph
+    
+
+
 def main() -> None:
     try:
-        graph_path_str = sys.argv[1]
+        puzzle_path_str = sys.argv[1]
     except IndexError:
-        raise Exception("Use: python ./src/eval.py ./graphs/<puzzle_graph>.graphml")
-    
-    graph_path = Path(graph_path_str)
+        raise Exception("Use: python ./src/eval.py ./puzzles/<puzzle>.json")
 
-    if not graph_path.is_file():
-        raise FileNotFoundError(f"Error: No se encontró el archivo {graph_path}")
-    
-    graph_name = str(graph_path.stem)
-    puzzle_graph = gt.load_graph(graph_path_str, fmt="graphml")
-    score = puzzle_evaluation(puzzle_graph, graph_name)
-    print(f"The score of {graph_name} is: {score}")
+
+    puzzle_path = Path(puzzle_path_str)
+    puzzle_name = str(puzzle_path.stem)
+    graph = extract_graph(puzzle_path)
+    score = puzzle_evaluation(graph, puzzle_name)
+    print(f"The score of {puzzle_name} is: {score}")
 
 if __name__ == '__main__':
     main()

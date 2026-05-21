@@ -210,6 +210,22 @@ def build_graf_from_json(json_data)-> gt.Graph:
     return builder.build()
 
 
+def save_graph(graph: gt.Graph, json_path: str) -> None:
+    """
+    Saves the graph in the directory ./graphs while recieving the json_path as a str
+    """
+        # Define and create the output directory
+    input_path = Path(json_path) 
+    output_dir = Path("graphs")
+    output_dir.mkdir(exist_ok=True)
+
+    # .stem automatically removes the '.json' extension for you!
+    out_path = output_dir / f"{input_path.stem}.graphml"    
+
+    graph.save(str(out_path))
+    print(f"Graph was succesfully saved in: {out_path}")
+    
+
 def main() -> None:
     """
     Saves the graph that corresponds to the puzzle
@@ -226,17 +242,9 @@ def main() -> None:
 
     #Cleaning Json data
     graph = build_graf_from_json(json_data)
-
-    # Define and create the output directory
-    input_path = Path(json_path) 
-    output_dir = Path("graphs")
-    output_dir.mkdir(exist_ok=True)
-
-    # .stem automatically removes the '.json' extension for you!
-    out_path = output_dir / f"{input_path.stem}.graphml"    
-
-    graph.save(str(out_path))
-    print(f"Graph was succesfully saved in: {out_path}")
+    save_graph(graph, json_path)
+    
+    
 
 if __name__ == "__main__":
     main()
