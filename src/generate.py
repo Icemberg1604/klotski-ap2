@@ -1,20 +1,29 @@
+import json
 import random
-from puzzle import Puzzle, State, Piece, Coord 
-import logic as lg
-from eval import puzzle_evaluation 
-from graph import PuzzleGraphBuilder 
 from typing import Optional
 from dataclasses import dataclass
 import graph_tool.all as gt
-import json
 
+# Importaciones de tus otros módulos
+from puzzle import Puzzle, State, Piece, Coord 
+from eval import puzzle_evaluation 
+from graph import PuzzleGraphBuilder 
+
+# =====================================================================
+# 1. CLASES DE CONFIGURACIÓN Y FORMATEO
+# =====================================================================
+
+@dataclass
+class PuzzleConfig:
+    """Define las reglas estructurales para generar un puzzle."""
+    w: int
+    h: int
+    pieces: list[Piece]
+    goal_idx: int = 0
+    goal_pos: Coord = (1, 3) 
 
 class Canonicalizer:
-
-    """
-    Checks that the puzzle is valid and formats it into a canonical state.
-    """
-
+    """Checks that the puzzle is valid and formats it into a canonical state."""
     w: int
     h: int
     walls: tuple[Coord,...]
@@ -27,63 +36,42 @@ class Canonicalizer:
     old_to_new_idx: dict[int, int]
     canon_goals: list[tuple[int, Coord]]
     
-
     def __init__(self, w: int, h: int, walls: list[Coord], pieces: list[Piece], start_positions: list[Coord], goals: list[tuple[int, Coord]]) -> None:
         self.w = w
         self.h = h
-
-        # Sort the walls and remove duplicates immediately
         self.walls = tuple(sorted(set(walls)))
         self.pieces = pieces
         self.start_positions = start_positions
         self.goals = goals
         
-        # Attributes to hold the translated data
         self.canon_pieces = []
         self.canon_positions = []
         self.old_to_new_idx = {}
         self.canon_goals = []
 
     def translator_indexes(self) -> None:
-        """
-        Matches pieces with their initial positions, sorts them canonically, 
-        and builds a dictionary to translate old indexes to new ones.
-        """
         paired = []
         for old_idx, (piece, pos) in enumerate(zip(self.pieces, self.start_positions)):
             paired.append((piece, pos, old_idx))
             
-        # Since Piece has order=True, it will automatically sort by shape and then position
         paired.sort(key=lambda x: (x[0], x[1]))
         
-        # Unpack the sorted result and populate class attributes
         for new_idx, (piece, pos, old_idx) in enumerate(paired):
             self.canon_pieces.append(piece)
             self.canon_positions.append(pos)
             self.old_to_new_idx[old_idx] = new_idx
 
     def mapping_objectives(self) -> None:
-        """
-        Updates the goal indexes using the translator dictionary and sorts them.
-        """
         for old_idx, target_pos in self.goals:
             new_idx = self.old_to_new_idx[old_idx]
             self.canon_goals.append((new_idx, tuple(target_pos))) #type: ignore
-            
-        # We sort the goals
         self.canon_goals.sort()
 
     def make_canonical(self) -> Puzzle:
-        """
-        Executes the translation steps and returns the valid Puzzle object.
-        """
-        # Execute the formatting steps
         self.translator_indexes()
         self.mapping_objectives()
-        
         canon_state = State(tuple(self.canon_positions))
         
-        # Create and return the puzzle
         return Puzzle(
             W=self.w,
             H=self.h,
@@ -92,21 +80,13 @@ class Canonicalizer:
             start=canon_state,
             goals=tuple(self.canon_goals)
         )
-    
-@dataclass
-class PuzzleConfig:
-    """Define las reglas estructurales para generar un puzzle."""
-    w: int
-    h: int
-    pieces: list[Piece]
-    goal_idx: int = 0
-    goal_pos: Coord = (1, 3) 
-    scramble_depth: int = 150
 
+# =====================================================================
+# 2. LA FÁBRICA DE SEMILLAS (SOLVED STATES)
+# =====================================================================
 
 class PuzzleGenerator:
-    """
-    The Factory class for creating valid, scrambled Klotski puzzles."""
+    """The Factory class for creating valid solved Klotski puzzles (Seeds)."""
     
     def __init__(self):
         self.BLOCK_2x2 = Piece.normalized([(0,0), (0,1), (1,0), (1,1)])
@@ -117,13 +97,13 @@ class PuzzleGenerator:
     def _choose_fitting_piece(self, remaining_space: int) -> tuple[Piece, int]:
         opciones = [self.BLOCK_1x1]
         if remaining_space >= 2:
-            opciones.extend([self.BLOCK_1x2_V, self.BLOCK_1x2_H]) # Incluida la horizontal aquí
+            opciones.extend([self.BLOCK_1x2_V, self.BLOCK_1x2_H])
             
         elegida = random.choice(opciones)
         area_elegida = 1 if elegida == self.BLOCK_1x1 else 2
         return elegida, area_elegida
 
-    def _generate_random_template(self, w: int, h: int) -> list[Piece]:
+    def generate_random_template(self, w: int, h: int) -> list[Piece]:
         target_area = (w * h) - 2
         template = [self.BLOCK_2x2]
         current_area = 4
@@ -157,8 +137,7 @@ class PuzzleGenerator:
     
     def _create_solved_state_smart(self, config: PuzzleConfig) -> tuple[Puzzle, State]:
         tablero = [[False for _ in range(config.h)] for _ in range(config.w)]
-        # El profesor asume State.positions como una tupla, así que la prepararemos así.
-        posiciones = [(-1, -1)] * len(config.pieces) # Inicializamos con basura
+        posiciones = [(-1, -1)] * len(config.pieces) 
         
         meta_piece = config.pieces[config.goal_idx]
         gx, gy = config.goal_pos
@@ -183,7 +162,10 @@ class PuzzleGenerator:
         puzzle_resuelto, _ = self._create_solved_state_smart(config)
         return puzzle_resuelto
 
-import graph_tool.all as gt
+
+# =====================================================================
+# 3. EL ORQUESTADOR Y LA EXTRACCIÓN DEL GRAFO
+# =====================================================================
 
 def extract_hardest_puzzle_from_graph(seed_puzzle: Puzzle, graph: gt.Graph) -> Puzzle:
     """
@@ -200,16 +182,15 @@ def extract_hardest_puzzle_from_graph(seed_puzzle: Puzzle, graph: gt.Graph) -> P
     
     # 3. Obtener el índice del nodo más alejado
     furthest_node_idx = int(dist_array.argmax())
+    distancia_max = dist_array[furthest_node_idx]
     
-    # =================================================================
-    # AQUÍ RECUPERAS EL ESTADO DESDE TU GRAFO
-    # Asumo que guardas las coordenadas en una string JSON o tuplas 
-    # en una propiedad del vértice llamada "state_str"
-    # =================================================================
+    print(f"   -> Nivel extraído con una profundidad de {distancia_max} movimientos perfectos.")
+    
+    # 4. Recuperar el estado crudo desde el grafo
     estado_crudo = json.loads(graph.vp["state"][graph.vertex(furthest_node_idx)])
     nuevas_posiciones = [tuple(coord) for coord in estado_crudo]
 
-    # 4. Canonicalizar el nuevo puzzle "desordenado"
+    # 5. Canonicalizar el nuevo puzzle "desordenado" para validarlo
     canonicalizer = Canonicalizer(
         w=seed_puzzle.W, 
         h=seed_puzzle.H, 
@@ -220,20 +201,20 @@ def extract_hardest_puzzle_from_graph(seed_puzzle: Puzzle, graph: gt.Graph) -> P
     )
     return canonicalizer.make_canonical()
 
-def generate_best_puzzle(amount: int) -> Optional[Puzzle]:
+def generate_good_puzzles(amount: int, threshold: float = 3.5) -> list[tuple[float, Puzzle]]:
     generador = PuzzleGenerator()
     w, h = 4, 5
     goal_idx = 0
     goal_pos = (1, 3)
 
-    mejor_puzzle = None
-    mejor_nota = -1.0
+    puzzles_aprobados = [] # Nuestra bóveda para la "cosecha buena"
 
     print(f"Generando y evaluando {amount} universos candidatos...")
+    print(f"Umbral de aprobación: {threshold}\n")
 
     for i in range(amount):
         try:
-            plantilla = generador._generate_random_template(w, h)
+            plantilla = generador.generate_random_template(w, h)
             config = PuzzleConfig(w=w, h=h, pieces=plantilla, goal_idx=goal_idx, goal_pos=goal_pos)
             
             # 1. Creamos la semilla resuelta
@@ -244,28 +225,46 @@ def generate_best_puzzle(amount: int) -> Optional[Puzzle]:
             graph = builder.build()
             
             # 3. Evaluamos la calidad topológica de ese universo
-            # (Usamos save_to_disk=False para no ensuciar)
             nota = puzzle_evaluation(graph, f"candidate_graph_{i}", save_to_disk=False)
             print(f"Universo {i}: Nota {nota}")
 
-            # 4. Si el universo es prometedor, extraemos el nivel más difícil
-            if nota > mejor_nota:
-                mejor_nota = nota
-                mejor_puzzle = extract_hardest_puzzle_from_graph(seed, graph)
+            # 4. El filtro de calidad
+            if nota >= threshold:
+                print(f"   -> ¡Supera el umbral! Extrayendo nivel maestro...")
+                hardcore_puzzle = extract_hardest_puzzle_from_graph(seed, graph)
+                # Guardamos la tupla (nota, puzzle)
+                puzzles_aprobados.append((nota, hardcore_puzzle))
                 
         except Exception as e:
             print(f"Universo {i} descartado: {e}")
             
-    print(f"\n¡Proceso terminado! El mejor puzzle sacó un {mejor_nota}.")
-    return mejor_puzzle
+    # Ordenamos los ganadores de mejor a peor nota
+    puzzles_aprobados.sort(key=lambda x: x[0], reverse=True)
+    
+    print(f"\n¡Proceso terminado! Se encontraron {len(puzzles_aprobados)} puzzles maestros.")
+    return puzzles_aprobados
 
 def main():
-    puzzle_ganador = generate_best_puzzle(amount=20)
+    import os
     
-    if puzzle_ganador:
-        with open("puzzles/generated_puzzle.json", mode="w", encoding="utf-8") as f:
-            f.write(puzzle_ganador.to_json(indent=4))
-        print("Guardado exitosamente en puzzles/generated_hardcore.json")
+    # Asegurarnos de que la carpeta existe antes de guardar múltiples archivos
+    os.makedirs("graphs", exist_ok=True)
+    
+    # Pedimos al programa 20 intentos, y guardamos los de nota >= 3.5
+    puzzles_ganadores = generate_good_puzzles(amount=20, threshold=3.5)
+    
+    if not puzzles_ganadores:
+        print("El generador fue muy estricto hoy. Ningún puzzle superó el umbral de 3.5.")
+        return
+
+    # Guardamos cada puzzle en disco con su nota en el nombre del archivo
+    for i, (nota, puzzle) in enumerate(puzzles_ganadores, start=1):
+        filename = f"graphs/hardcore_{i}_nota_{nota}.json"
+        
+        with open(filename, mode="w", encoding="utf-8") as f:
+            f.write(puzzle.to_json(indent=4))
+            
+        print(f"Guardado exitosamente en {filename}")
 
 if __name__ == "__main__":
     main()
