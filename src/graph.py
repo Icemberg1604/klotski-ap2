@@ -168,7 +168,7 @@ class PuzzleGraphBuilder:
         old_remaining_vertices = remaining_vertices
 
 
-        while self.queue:
+        while self.queue and num_vertices < 700000:
 
             if old_remaining_vertices + 10000 < remaining_vertices or old_num_vertices + 10000 < num_vertices:
                 print(remaining_vertices)
