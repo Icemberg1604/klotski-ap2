@@ -152,6 +152,7 @@ class PuzzleGraphBuilder:
         """
         Main loop of the BFS. It creates the puzzle's graph by expanding it and saves the solution in gp["solution]
         """
+        
 
         self.v_start, _ = self._register_state(self.puzzle.start)
         self.graph.vp["is_start"][self.v_start] = True
@@ -160,10 +161,22 @@ class PuzzleGraphBuilder:
             self.graph.graph_properties["solution"] = json.dumps([])
             self.solution_found = True
 
+        num_vertices = self.graph.num_vertices()
+        remaining_vertices = len(self.queue)
+
+        old_num_vertices = num_vertices
+        old_remaining_vertices = remaining_vertices
+
+
         while self.queue:
 
-            print(len(self.queue))
-            print(self.graph.num_vertices())
+            if old_remaining_vertices + 10000 < remaining_vertices or old_num_vertices + 10000 < num_vertices:
+                print(remaining_vertices)
+                print(num_vertices)
+
+                old_num_vertices = num_vertices
+                old_remaining_vertices = remaining_vertices
+            
 
             v_state = self.queue.popleft()
             possible_moves = lg.possible_moves(self.puzzle, v_state)
@@ -190,6 +203,10 @@ class PuzzleGraphBuilder:
                     self.graph.ep["piece"][edge] = piece_idx
                     self.graph.ep["direction"][edge] = direction
 
+            #check how it is going
+            num_vertices = self.graph.num_vertices()
+            remaining_vertices = len(self.queue)
+            
         if not self.solution_found:
             self.graph.graph_properties["solution"] = json.dumps(None)
 
