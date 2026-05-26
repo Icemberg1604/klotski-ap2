@@ -51,7 +51,9 @@ AREAS = {
 # 2. HELPER FUNCTIONS AND FORMATTERS
 # =====================================================================
 def build_graph(p: Puzzle) -> gt.Graph:
-    """Wrapper to instantly expand a puzzle into its state-space graph."""
+    """
+    Wrapper to instantly expand a puzzle into its state-space graph.
+    """
     return PuzzleGraphBuilder(p, p.to_json()).build()
 
 class Canonicalizer:
@@ -204,15 +206,15 @@ def get_hardest(seed: Puzzle, g: gt.Graph) -> Puzzle:
     dists = gt.shortest_distance(g, source=dummy).a[:-1] - 1
     g.remove_vertex(dummy)
     
+    max_d = dists.max()
+    if max_d < 30:
+        raise ValueError(f"Graph too simple (max depth is only {max_d} moves)")
+    
     # 4. Find the absolute furthest states from the goals
-    furthest = int(random.choice((dists >= dists.max() - 2).nonzero()[0]))
+    furthest = int(random.choice((dists >= max_d - 2).nonzero()[0]))
     print(f"   -> Extracted level with a depth of {dists[furthest]} perfect moves from nearest goal.")
     
-    # 5. Extract the solution path to the goal for the evaluator
-    _, elist = gt.shortest_path(g, source=g.vertex(furthest), target=g.vertex(0))
-    g.graph_properties["solution"] = json.dumps([[int(g.ep["piece"][e]), str(g.ep["direction"][e])] for e in elist])
-    
-    # 6. Rebuild the puzzle at this new hardest starting state
+    # 5. Rebuild the puzzle at this new hardest starting state
     new_pos = [tuple(c) for c in json.loads(g.vp["state"][g.vertex(furthest)])]
     
     canonicalizer = Canonicalizer(
@@ -221,8 +223,10 @@ def get_hardest(seed: Puzzle, g: gt.Graph) -> Puzzle:
     )
     return canonicalizer.make_canonical()
 
-def main(threshold=3.5):
-    """Main loop generating, solving, and evaluating puzzles until threshold is met."""
+def generate_puzzle(threshold: float, num_puzzles: int = 1):
+    """
+    Main loop generating, solving, and evaluating puzzles until threshold is met.
+    """
     Path("puzzles").mkdir(exist_ok=True)
     candidate = 1
     print(f"Generating puzzles until finding one with evaluation > {threshold}...\n")
@@ -257,6 +261,9 @@ def main(threshold=3.5):
             print(f"Candidate {candidate} discarded due to error: {e}")
             
         candidate += 1
+
+def main():
+    generate_puzzle(threshold=3.5)
 
 if __name__ == "__main__": 
     main()
