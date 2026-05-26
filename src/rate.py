@@ -1,14 +1,17 @@
 import os
-from dotenv import load_dotenv
 import urllib.request
 import urllib.error
 import json
 import sys
+import argparse
 from pathlib import Path
+from dotenv import load_dotenv
 import graph_tool.all as gt  # type: ignore
 
-# Import your evaluation logic
 from eval import puzzle_evaluation
+import download
+from puzzle import Puzzle
+from graph import PuzzleGraphBuilder
 
 
 def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
@@ -18,7 +21,8 @@ def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
     url = f"https://klotski.pauek.dev/api/puzzles/{puzzle_id}/votes"
 
     # Package the rating into a JSON payload.
-    data_payload = json.dumps({"vote": rating}).encode("utf-8")
+    rating = int(rating)
+    data_payload = json.dumps({"stars": rating}).encode("utf-8")
 
     # Build the HTTP request with the necessary headers
     request = urllib.request.Request(
@@ -50,38 +54,93 @@ def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
 
 
 def main() -> None:
-    # Expecting: python src/rate.py <puzzle_id> <path_to_graphml>
-    if len(sys.argv) != 3:
-        print("Usage: python src/rate.py <puzzle_id> <path_to_graphml>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Evaluates a Klotski puzzle and submits the rating to the server.",
+        epilog="""
+Examples:
+  pixi run python src/rate.py                            (Fetches & rates the #1 top puzzle)
+  pixi run python src/rate.py 0b1339cc...                (Fetches & rates a specific puzzle)
+  pixi run python src/rate.py 0b1339cc... -g path.graphml (Rates using a local graph file)
+        """,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
 
-    puzzle_id = sys.argv[1]
-    graph_path_str = sys.argv[2]
+    # Define our expected arguments
+    parser.add_argument(
+        "puzzle_id",
+        nargs="?",
+        default="TOP",
+        help="The ID of the puzzle (Leave blank to auto-fetch the top rated)",
+    )
+    parser.add_argument(
+        "-g",
+        "--graph",
+        type=str,
+        help="Optional: Path to a pre-computed .graphml file to save processing time",
+    )
 
-    # 1. Load the graph
-    graph_path = Path(graph_path_str)
-    if not graph_path.is_file():
-        print(f"Error: Could not find the file {graph_path}")
-        sys.exit(1)
+    args = parser.parse_args()
 
-    print(f"Loading graph {graph_path.name}...")
-    puzzle_graph = gt.load_graph(str(graph_path), fmt="graphml")
-
-    # 2. Calculate the score
-    raw_score = puzzle_evaluation(puzzle_graph, graph_path.stem)
-    final_score = max(0.0, min(5.0, raw_score))
-
-    # 3. SECURELY LOAD THE TOKEN
+    # 2. SECURELY LOAD THE TOKEN
     load_dotenv()
     MY_TOKEN = os.getenv("KLOTSKI_TOKEN")
 
-    # Fail gracefully if the token is missing
     if not MY_TOKEN:
         print("❌ Error: KLOTSKI_TOKEN environment variable is missing.")
-        print("Please ensure you have a .env file with KLOTSKI_TOKEN=your_token")
         sys.exit(1)
 
-    # 4. Submit to the API
+    # 3. DETERMINE THE TARGET PUZZLE
+    if args.puzzle_id == "TOP":
+        print(
+            "No ID provided. Fetching the #1 Top Rated puzzle from the repository..."
+        )
+        try:
+            puzzle_list = download.get_puzzles()
+            top_puzzle = puzzle_list[0]
+            puzzle_id = top_puzzle["id"] if isinstance(top_puzzle, dict) else top_puzzle
+            print(f"Target Locked: {puzzle_id}")
+        except Exception as e:
+            print(f"❌ Failed to fetch the leaderboard: {e}")
+            sys.exit(1)
+    else:
+        puzzle_id = args.puzzle_id
+        print(f"Target Locked: {puzzle_id}")
+
+    # 4. LOAD OR BUILD THE GRAPH
+    if args.graph:
+        # User provided a specific file via the -g flag
+        graph_path = Path(args.graph)
+        if not graph_path.is_file():
+            print(f"Error: Could not find the graph file at '{graph_path}'")
+            sys.exit(1)
+
+        print(f"Loading pre-computed graph from {graph_path.name}...")
+        puzzle_graph = gt.load_graph(str(graph_path), fmt="graphml")
+    else:
+        # Build it in memory using the API
+        print(f"Downloading JSON to build graph space in memory...")
+        try:
+            download.download_puzzle(puzzle_id, save_folder="puzzles", name=puzzle_id)
+            json_path = Path(f"puzzles/{puzzle_id}.json")
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                puzzle_data = json.load(f)
+
+            clean_json = json.dumps(puzzle_data)
+            puz = Puzzle.from_json(clean_json)
+            builder = PuzzleGraphBuilder(puz, clean_json)
+
+            print("Processing Breadth-First Search...")
+            puzzle_graph = builder.build()
+        except Exception as e:
+            print(f"❌ Failed to process puzzle: {e}")
+            sys.exit(1)
+
+    # 5. CALCULATE & SUBMIT
+    print("Calculating heuristic score...")
+    raw_score = puzzle_evaluation(puzzle_graph, puzzle_id)
+    final_score = max(0.0, min(5.0, raw_score))
+
     submit_rating(puzzle_id, final_score, MY_TOKEN)
 
 
