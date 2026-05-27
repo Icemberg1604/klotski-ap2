@@ -21,44 +21,45 @@ from eval import puzzle_evaluation, extract_graph
 import download
 
 
-def submit_rating(puzzle_id: str, rating: float, token: str) -> None:
+def submit_rating(puzzle_id: str, rating: float, tokens: list[str]) -> None:
     """Sends the calculated rating for a specific puzzle to the server.
 
     Args:
         puzzle_id: The unique identifier of the target puzzle.
         rating: The calculated raw score (float). This will be rounded
             to the nearest integer star rating before submission.
-        token: The Bearer authorization token for API access.
+        tokens: A list of the Bearer authorization token for API access.
     """
     url = f"https://klotski.pauek.dev/api/puzzles/{puzzle_id}/votes"
     integer_stars = int(round(rating))
     data_payload = json.dumps({"stars": integer_stars}).encode("utf-8")
 
-    request = urllib.request.Request(
-        url,
-        data=data_payload,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-    )
+    for idx, token in enumerate(tokens, start=1):
+        request = urllib.request.Request(
+            url,
+            data=data_payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
 
-    print(f"Sending rating of {integer_stars} stars for puzzle '{puzzle_id}'...")
+        print(f"Sending rating of {integer_stars} stars for puzzle '{puzzle_id}'...")
 
-    try:
-        with urllib.request.urlopen(request) as response:
-            if response.status in [200, 201]:
-                print(f"Rating accepted by the server.")
-            else:
-                print(f"Warning: Server returned status {response.status}")
-    except urllib.error.HTTPError as e:
-        print(f"HTTP Error: {e.code} - {e.reason}")
-        error_msg = e.read().decode("utf-8")
-        if error_msg:
-            print(f"Server details: {error_msg}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        try:
+            with urllib.request.urlopen(request) as response:
+                if response.status in [200, 201]:
+                    print(f"Rating accepted by the server.")
+                else:
+                    print(f"Warning: Server returned status {response.status}")
+        except urllib.error.HTTPError as e:
+            print(f"HTTP Error: {e.code} - {e.reason}")
+            error_msg = e.read().decode("utf-8")
+            if error_msg:
+                print(f"Server details: {error_msg}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
 
 def main() -> None:
@@ -66,7 +67,7 @@ def main() -> None:
 
     # 1. SETUP THE COMMAND LINE INTERFACE
     parser = argparse.ArgumentParser(
-        description="Evaluates a Klotski puzzle and submits the rating to the server.",
+        description="Evaluates a Klotski puzzle and submits the rating to the server for all configured tokens.",
         epilog=(
             """Examples:
                 pixi run python src/rate.py                (Fetches & rates the #1 top puzzle)
@@ -86,10 +87,21 @@ def main() -> None:
 
     # 2. SECURELY LOAD THE TOKEN
     load_dotenv()
-    MY_TOKEN = os.getenv("KLOTSKI_TOKEN")
-    if not MY_TOKEN:
+
+    active_tokens: list[str] = []
+    token1 = os.getenv("KLOTSKI_TOKEN")
+    token2 = os.getenv("FRIEND_KLOTSKI_TOKEN")
+
+    if token1:
+        active_tokens.append(token1)
+    if token2:
+        active_tokens.append(token2)
+
+    if not active_tokens:
         print("Error: KLOTSKI_TOKEN environment variable is missing.")
         sys.exit(1)
+
+    print(f"System initialized with {len(active_tokens)} active credential(s).")
 
     # 3. DETERMINE THE TARGET PUZZLE
     puzzle_id: str = ""
@@ -99,7 +111,7 @@ def main() -> None:
             puzzle_list: list[Any] = download.get_puzzles()
             top_puzzle: Any = puzzle_list[0]
             # Handle whether top_puzzle is a dictionary or just a string ID
-            puzzle_id = str(top_puzzle["id"]) if isinstance(top_puzzle, dict) else str(top_puzzle) # type: ignore
+            puzzle_id = str(top_puzzle["id"]) if isinstance(top_puzzle, dict) else str(top_puzzle)  # type: ignore
             print(f"Target Locked: {puzzle_id}")
         except Exception as e:
             print(f"Failed to fetch leaderboard: {e}")
@@ -114,7 +126,7 @@ def main() -> None:
         print("JSON not found locally. Downloading...")
         download.download_puzzle(puzzle_id, save_folder="puzzles", name=puzzle_id)
 
-    # 5. SMART GRAPH EXTRACTION 
+    # 5. SMART GRAPH EXTRACTION
     try:
         puzzle_graph = extract_graph(json_path)
     except Exception as e:
@@ -126,7 +138,7 @@ def main() -> None:
     raw_score = puzzle_evaluation(puzzle_graph, puzzle_id)
     final_score = max(0.0, min(5.0, raw_score))
 
-    submit_rating(puzzle_id, final_score, MY_TOKEN)
+    submit_rating(puzzle_id, final_score, active_tokens)
 
 
 if __name__ == "__main__":
