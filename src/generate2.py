@@ -191,7 +191,7 @@ def create_seed(w: int, h: int) -> Puzzle:
 # =====================================================================
 # 4. EXTRACTION AND EVALUATION
 # =====================================================================
-def get_hardest(seed: Puzzle, g: gt.Graph) -> Puzzle:
+def get_hardest(seed: Puzzle, g: gt.Graph, min_req: int) -> Puzzle:
     """Finds the furthest state from all goals natively using graph-tool BFS dummy vertex trick."""
     
     # 1. Identify all goal nodes, default to the initial state if none exist
@@ -207,7 +207,7 @@ def get_hardest(seed: Puzzle, g: gt.Graph) -> Puzzle:
     g.remove_vertex(dummy)
     
     max_d = dists.max()
-    if max_d < 30:
+    if max_d < min_req:
         raise ValueError(f"Graph too simple (max depth is only {max_d} moves)")
     
     # 4. Find the absolute furthest states from the goals
@@ -223,7 +223,7 @@ def get_hardest(seed: Puzzle, g: gt.Graph) -> Puzzle:
     )
     return canonicalizer.make_canonical()
 
-def generate_puzzle(threshold: float, num_puzzles: int = 1):
+def generate_puzzle(threshold: float, num_puzzles: int = 1, min_steps: int = 30):
     """
     Main loop generating, solving, and evaluating puzzles until threshold is met.
     """
@@ -237,7 +237,7 @@ def generate_puzzle(threshold: float, num_puzzles: int = 1):
             # 1. Generate Solved State (Seed)
             seed = create_seed(w, h)
             # 2. Expand Graph and Extract Hardest Unsolved State
-            hardest = get_hardest(seed, build_graph(seed))
+            hardest = get_hardest(seed, build_graph(seed), min_steps)
             # 3. Rebuild Graph from the Hardest State for evaluation
             eval_graph = build_graph(hardest)
             score = puzzle_evaluation(eval_graph, f"cand_{candidate}", save_to_disk=False)
