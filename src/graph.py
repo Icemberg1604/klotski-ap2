@@ -134,6 +134,7 @@ class PuzzleGraphBuilder:
     def _reconstruct_solution(self, end_node) -> None:
         """
         Once we found the solution, recreates all the path from the 
+        end_node (v_end) to the start node (v_start)
         """
         self.solution_found = True
         path = []
@@ -153,10 +154,10 @@ class PuzzleGraphBuilder:
         Main loop of the BFS. It creates the puzzle's graph by expanding it and saves the solution in gp["solution]
         """
         
-
         self.v_start, _ = self._register_state(self.puzzle.start)
         self.graph.vp["is_start"][self.v_start] = True
         
+        #Checks the case of the goal being the starting state
         if self.graph.vp["is_goal"][self.v_start]:
             self.graph.graph_properties["solution"] = json.dumps([])
             self.solution_found = True
@@ -169,7 +170,8 @@ class PuzzleGraphBuilder:
 
 
         while self.queue and num_vertices < 700000:
-
+            
+            #Prints the evolution of the graph
             if old_remaining_vertices + 10000 < remaining_vertices or old_num_vertices + 10000 < num_vertices:
                 print(remaining_vertices)
                 print(num_vertices)
@@ -177,7 +179,7 @@ class PuzzleGraphBuilder:
                 old_num_vertices = num_vertices
                 old_remaining_vertices = remaining_vertices
             
-
+            #Selects a state to be expanded
             v_state = self.queue.popleft()
             possible_moves = lg.possible_moves(self.puzzle, v_state)
             v_curr_canonical = get_canonical_position(v_state, self.same_shape_pieces)
@@ -190,7 +192,7 @@ class PuzzleGraphBuilder:
                 v_next_id, is_new = self._register_state(u_state)
 
                 if not self.solution_found and is_new:
-                    #we save the route we came from
+                    #we save the route we came from (only if we havent found the solution yet)
                     self.came_from[v_next_id] = (v_curr_id, piece_idx, direction)
  
                     if self.graph.vp["is_goal"][v_next_id]: 
@@ -211,8 +213,20 @@ class PuzzleGraphBuilder:
             self.graph.graph_properties["solution"] = json.dumps(None)
 
         return self.graph
-    
+
+
+def build_graph_bfs(puzzle: Puzzle) -> gt.Graph:
+    """
+    Returns the graph built from the BFS algorithm.
+    puzzle (Puzzle): The puzzle to be represented as a graph.
+    """
+    return PuzzleGraphBuilder(puzzle, puzzle.to_json()).build()
+
 def build_graf_from_json(json_data)-> gt.Graph:
+    """
+    Returns the graph built from the JSON data.
+    json_data (dict): Dictionary containing the puzzle's JSON data.
+    """
 
     if "puzzle" in json_data:
         json_data = json_data["puzzle"]
@@ -231,7 +245,7 @@ def save_graph(graph: gt.Graph, json_path: str) -> None:
     """
     Saves the graph in the directory ./graphs while recieving the json_path as a str
     """
-        # Define and create the output directory
+    # Define and create the output directory
     input_path = Path(json_path) 
     output_dir = Path("graphs")
     output_dir.mkdir(exist_ok=True)

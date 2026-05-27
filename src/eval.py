@@ -12,6 +12,7 @@ def get_solution(graph: gt.Graph, graph_name: str, save_to_disk: bool = True) ->
     Gets the solution path from the graph. If the file is already created, it uses it. Else, it searches for the 
     solution of the graph. If save_to_disk is True, it saves this solution on a json-solutions directory.
     """
+
     sol_dir = Path("json-solutions")
     sol_path = sol_dir / f"{graph_name}.sol.json"
 
@@ -47,16 +48,16 @@ def evaluate_topology(graph: gt.Graph) -> tuple[float, float]:
     
     out_degrees = graph.degree_property_map("out").a
     
-    # Check the amount of dead ends
+    # Check the amount of dead ends (i.e., the nodes with only 1 outgoing edge)
     dead_ends = (out_degrees == 1).sum()
     proportion_dead_ends = float(dead_ends / total_vertices)
     
-    # Check the levels of ramifications
+    # Saves the nodes with more than 1 outgoint edge
     nodes_with_options = out_degrees[out_degrees > 1]
-    
+
+    # Evaluates the mean ramification factor. Divides by 5.0 to give a standard (0.0 to 1.0)
     if len(nodes_with_options) > 0:
         mean_branch = nodes_with_options.mean() 
-        # Divide by 5.0 to give a standard
         branch_score = min(1.0, float(mean_branch / 5.0))
 
     else:
