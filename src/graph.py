@@ -8,11 +8,10 @@ import json
 from pathlib import Path
 
 Coord: TypeAlias = tuple[int, int]
-StateKey: TypeAlias = tuple[Coord, ...]
+StateKey: TypeAlias = tuple[Coord,...]
 
-
-def equiv_shapes(puzzle: Puzzle) -> tuple[tuple[int, ...], ...]:
-
+def equiv_shapes(puzzle: Puzzle) -> tuple[tuple[int,...],...]:
+    
     goal_pieces: set[int] = {goal[0] for goal in puzzle.goals}
     dict_equiv_shapes: dict[StateKey, list[int]] = {}
 
@@ -20,31 +19,23 @@ def equiv_shapes(puzzle: Puzzle) -> tuple[tuple[int, ...], ...]:
         if index not in goal_pieces:
             shape = piece.coords
             if shape not in dict_equiv_shapes:
-                dict_equiv_shapes[shape] = []
+                dict_equiv_shapes[shape] =  []
             dict_equiv_shapes[shape].append(index)
+        
+    return tuple(tuple(indexes) for indexes in dict_equiv_shapes.values() if len(indexes) > 1)
 
-    return tuple(
-        tuple(indexes) for indexes in dict_equiv_shapes.values() if len(indexes) > 1
-    )
-
-
-def get_canonical_position(
-    state_data: State, identical_pieces: tuple[tuple[int, ...], ...]
-) -> StateKey:
+def get_canonical_position(state_data: State, identical_pieces: tuple[tuple[int,...],...]) -> StateKey:
     pos_l = list(state_data.positions)
     for group in identical_pieces:
-        new_coords = sorted(
-            [state_data.positions[piece_index] for piece_index in group]
-        )
+        new_coords = sorted([state_data.positions[piece_index] for piece_index in group ])
         for index, coord in zip(group, new_coords):
             pos_l[index] = coord
 
     return tuple(pos_l)
 
-
 def state_key(puzzle: Puzzle, state: State | str) -> StateKey:
     """
-    Adapting function for 3D_view.py.
+    Adapting function for 3D_view.py. 
     Cleans the entry data and uses the calculations of get_canonical_position to return the StateKey.
     """
     identical_pieces = equiv_shapes(puzzle)
@@ -52,7 +43,7 @@ def state_key(puzzle: Puzzle, state: State | str) -> StateKey:
     if isinstance(state, str):
         parsed_positions = tuple(tuple(p) for p in json.loads(state))
         clean_state = State(parsed_positions)
-
+        
     else:
         clean_state = state
 
@@ -60,13 +51,14 @@ def state_key(puzzle: Puzzle, state: State | str) -> StateKey:
 
 
 def create_empty_graph(json_str: str) -> gt.Graph:
+
     """
     Creates the graph with the folowing properties
-    Vertex properties: is_start for indicating which node is the starting state; is_goal for showing that the node is one of the
+    Vertex properties: is_start for indicating which node is the starting state; is_goal for showing that the node is one of the 
     posible solutions. "state" saves the data as a json str that posseses the state of the graph at that vertex.
     """
     g = gt.Graph(directed=False)
-
+    
     # v_properties
     v_is_start = g.new_vertex_property("bool")
     v_is_goal = g.new_vertex_property("bool")
@@ -76,10 +68,10 @@ def create_empty_graph(json_str: str) -> gt.Graph:
     e_piece = g.new_edge_property("int")
     e_move_dir = g.new_edge_property("string")
 
-    # g_property
+    #g_property
     g_puzzle = g.new_graph_property("string")
-    g_solution = g.new_graph_property("string")
-
+    g_solution  = g.new_graph_property("string")
+    
     # We save this properties in the graph, so we can access to them later
     g.vertex_properties["is_start"] = v_is_start
     g.vertex_properties["is_goal"] = v_is_goal
@@ -87,28 +79,25 @@ def create_empty_graph(json_str: str) -> gt.Graph:
 
     g.edge_properties["piece"] = e_piece
     g.edge_properties["direction"] = e_move_dir
-
+    
     g.graph_properties["puzzle"] = g_puzzle
     g.graph_properties["solution"] = g_solution
     
     g.graph_properties["puzzle"] = json_str
-
+ 
     return g
 
 
 class PuzzleGraphBuilder:
     """
-    Class made for building the whole graph and finding a
+    Class made for building the whole graph and finding a 
     """
-
     puzzle: Puzzle
     graph: gt.Graph
-
-    visited: dict[StateKey, Any]  # Saves the value[vertex] of the key[state]
-    came_from: dict[Any, Any]  # saves the vertex[key] that leaded to the vertex[value]
-    queue: deque[
-        State
-    ]  # queue for saving the next states of the puzzle to be processed
+    
+    visited: dict[StateKey, Any] #Saves the value[vertex] of the key[state]
+    came_from: dict[Any, Any] #saves the vertex[key] that leaded to the vertex[value]
+    queue: deque[State] #queue for saving the next states of the puzzle to be processed
 
     v_start: int | None
     solution_found: bool
@@ -132,7 +121,7 @@ class PuzzleGraphBuilder:
         """
         canonical_state = get_canonical_position(state, self.same_shape_pieces)
         is_new = canonical_state not in self.visited
-
+        
         if is_new:
             v = self.graph.add_vertex()
             self.visited[canonical_state] = v
@@ -141,71 +130,103 @@ class PuzzleGraphBuilder:
             self.queue.append(state)
 
         return self.visited[canonical_state], is_new
-
+        
     def _reconstruct_solution(self, end_node) -> None:
         """
-        Once we found the solution, recreates all the path from the
+        Once we found the solution, recreates all the path from the 
+        end_node (v_end) to the start node (v_start)
         """
         self.solution_found = True
         path = []
         curr_node = end_node
-
+        
         while curr_node != self.v_start:
             parent_node, piece, dir_str = self.came_from[curr_node]
             path.append([piece, dir_str])
             curr_node = parent_node
-
+        
         path.reverse()
         self.graph.graph_properties["solution"] = json.dumps(path)
+
 
     def build(self) -> gt.Graph:
         """
         Main loop of the BFS. It creates the puzzle's graph by expanding it and saves the solution in gp["solution]
         """
-
+        
         self.v_start, _ = self._register_state(self.puzzle.start)
         self.graph.vp["is_start"][self.v_start] = True
-
+        
+        #Checks the case of the goal being the starting state
         if self.graph.vp["is_goal"][self.v_start]:
             self.graph.graph_properties["solution"] = json.dumps([])
             self.solution_found = True
 
-        while self.queue:
+        num_vertices = self.graph.num_vertices()
+        remaining_vertices = len(self.queue)
 
-            # print(len(self.queue))
-            # print(self.graph.num_vertices())
+        old_num_vertices = num_vertices
+        old_remaining_vertices = remaining_vertices
 
+
+        while self.queue and num_vertices < 700000:
+            
+            #Prints the evolution of the graph
+            if old_remaining_vertices + 10000 < remaining_vertices or old_num_vertices + 10000 < num_vertices:
+                print(remaining_vertices)
+                print(num_vertices)
+
+                old_num_vertices = num_vertices
+                old_remaining_vertices = remaining_vertices
+            
+            #Selects a state to be expanded
             v_state = self.queue.popleft()
             possible_moves = lg.possible_moves(self.puzzle, v_state)
             v_curr_canonical = get_canonical_position(v_state, self.same_shape_pieces)
             v_curr_id = self.visited[v_curr_canonical]
 
-            # We handle the scenarios for every possible move from our starting v_state
+            #We handle the scenarios for every possible move from our starting v_state
             for move in possible_moves:
                 u_state = lg.apply_move(self.puzzle, v_state, move)
                 piece_idx, direction, _ = move
                 v_next_id, is_new = self._register_state(u_state)
 
                 if not self.solution_found and is_new:
-                    # we save the route we came from
+                    #we save the route we came from (only if we havent found the solution yet)
                     self.came_from[v_next_id] = (v_curr_id, piece_idx, direction)
-
-                    if self.graph.vp["is_goal"][v_next_id]:
+ 
+                    if self.graph.vp["is_goal"][v_next_id]: 
                         self._reconstruct_solution(v_next_id)
                         self.came_from.clear()
 
-                # we create the conections between nodes
+                #we create the conections between nodes
                 if not self.graph.edge(v_curr_id, v_next_id):
                     edge = self.graph.add_edge(v_curr_id, v_next_id)
                     self.graph.ep["piece"][edge] = piece_idx
                     self.graph.ep["direction"][edge] = direction
 
+            #check how it is going
+            num_vertices = self.graph.num_vertices()
+            remaining_vertices = len(self.queue)
+            
         if not self.solution_found:
             self.graph.graph_properties["solution"] = json.dumps(None)
 
         return self.graph
-    
+
+
+def build_graph_bfs(puzzle: Puzzle) -> gt.Graph:
+    """
+    Returns the graph built from the BFS algorithm.
+    puzzle (Puzzle): The puzzle to be represented as a graph.
+    """
+    return PuzzleGraphBuilder(puzzle, puzzle.to_json()).build()
+
 def build_graf_from_json(json_data)-> gt.Graph:
+    """
+    Returns the graph built from the JSON data.
+    json_data (dict): Dictionary containing the puzzle's JSON data.
+    """
 
     if "puzzle" in json_data:
         json_data = json_data["puzzle"]
@@ -224,13 +245,13 @@ def save_graph(graph: gt.Graph, json_path: str) -> None:
     """
     Saves the graph in the directory ./graphs while recieving the json_path as a str
     """
-        # Define and create the output directory
+    # Define and create the output directory
     input_path = Path(json_path) 
     output_dir = Path("graphs")
     output_dir.mkdir(exist_ok=True)
 
     # .stem automatically removes the '.json' extension for you!
-    out_path = output_dir / f"{input_path.stem}.graphml"
+    out_path = output_dir / f"{input_path.stem}.graphml"    
 
     graph.save(str(out_path))
     print(f"Graph was succesfully saved in: {out_path}")
