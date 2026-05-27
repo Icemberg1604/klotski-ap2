@@ -45,12 +45,14 @@ def submit_rating(puzzle_id: str, rating: float, tokens: list[str]) -> None:
             },
         )
 
-        print(f"Sending rating of {integer_stars} stars for puzzle '{puzzle_id}'...")
+        print(
+            f"Sending rating of {integer_stars} stars for puzzle '{puzzle_id}'with token {idx}..."
+        )
 
         try:
             with urllib.request.urlopen(request) as response:
                 if response.status in [200, 201]:
-                    print(f"Rating accepted by the server.")
+                    print(f"Rating accepted by the server for Token {idx}.")
                 else:
                     print(f"Warning: Server returned status {response.status}")
         except urllib.error.HTTPError as e:
