@@ -27,12 +27,22 @@ def main() -> None:
     parser.parse_args()
 
     load_dotenv()
-    api_token: str | None = os.getenv("KLOTSKI_TOKEN")
-    if not api_token:
-        print("Error: KLOTSKI_TOKEN environment variable is missing.")
+    active_tokens: list[str] = []
+    token1: str | None = os.getenv("KLOTSKI_TOKEN_MIGUEL")
+    token2: str | None = os.getenv("KLOTSKI_TOKEN_MARCOS")
+
+    if token1:
+        active_tokens.append(token1)
+    if token2:
+        active_tokens.append(token2)
+
+    if not active_tokens:
+        print("Error: No valid tokens found in your .env file.")
         sys.exit(1)
 
-    print("Fetching the master list of puzzles...")
+    print(
+        f" Batch processing initialized with {len(active_tokens)} active credential(s)."
+    )
     try:
         puzzle_list: list[Any] = download.get_puzzles()
     except Exception as e:
@@ -41,7 +51,7 @@ def main() -> None:
 
     # Safely extract and explicitly cast puzzle IDs to strings
     puzzle_ids: list[str] = [
-        str(p["id"]) if isinstance(p, dict) and "id" in p else str(p) # type: ignore
+        str(p["id"]) if isinstance(p, dict) and "id" in p else str(p)  # type: ignore
         for p in puzzle_list
     ]
     print(f"Found {len(puzzle_ids)} puzzles. Starting batch processing...\n")
@@ -63,7 +73,7 @@ def main() -> None:
             # 3. Evaluate and Submit
             raw_score: float = float(puzzle_evaluation(graph, puzzle_id))
             final_score: float = max(0.0, min(5.0, raw_score))
-            submit_rating(puzzle_id, final_score, api_token)
+            submit_rating(puzzle_id, final_score, active_tokens)
 
         except Exception as e:
             print(f"⚠️ Skipping {puzzle_id} due to an error: {e}")
