@@ -1,77 +1,87 @@
+"""Batch evaluates and rates all Klotski puzzles in the repository.
+
+This script acts as a master loop, fetching the complete list of puzzles
+from the server, downloading any missing local JSON definitions, generating
+their graph representations, calculating a heuristic score, and submitting
+the ratings sequentially.
+"""
+
+import argparse
 import os
-import json
 import sys
 from pathlib import Path
+from typing import Any
+
 from dotenv import load_dotenv
 
-# Import the modules you and your partner built
 import download
-from puzzle import Puzzle
-from graph import PuzzleGraphBuilder
-from eval import puzzle_evaluation
+from eval import extract_graph, puzzle_evaluation
 from rate import submit_rating
 
 
 def main() -> None:
-    # 1. Securely load the API token
+    """Parses arguments, fetches the puzzle master list, and runs the batch evaluation."""
+    parser = argparse.ArgumentParser(
+        description="Batch evaluates and rates all puzzles in the repository."
+    )
+    parser.parse_args()
+
     load_dotenv()
-    token = os.getenv("KLOTSKI_TOKEN")
+    active_tokens: list[str] = []
+    token1: str | None = os.getenv("KLOTSKI_TOKEN_MIGUEL")
+    token2: str | None = os.getenv("KLOTSKI_TOKEN_MARCOS")
 
-    if not token:
-        print("❌ Error: KLOTSKI_TOKEN environment variable is missing.")
+    if token1:
+        active_tokens.append(token1)
+    if token2:
+        active_tokens.append(token2)
+
+    if not active_tokens:
+        print("Error: No valid tokens found in your .env file.")
         sys.exit(1)
 
-    print("Fetching the master list of puzzles from the repository...")
+    print(
+        f" Batch processing initialized with {len(active_tokens)} active credential(s)."
+    )
     try:
-        puzzle_list = download.get_puzzles()
+        puzzle_list: list[Any] = download.get_puzzles()
     except Exception as e:
-        print(f"❌ Failed to fetch puzzle list: {e}")
+        print(f"Failed to fetch puzzle list: {e}")
         sys.exit(1)
 
-    # The API might return a list of strings or a list of dictionaries.
-    # This safely extracts the ID regardless of the format.
-    puzzle_ids = [
-        p["id"] if isinstance(p, dict) and "id" in p else p for p in puzzle_list
+    # Safely extract and explicitly cast puzzle IDs to strings
+    puzzle_ids: list[str] = [
+        str(p["id"]) if isinstance(p, dict) and "id" in p else str(p)  # type: ignore
+        for p in puzzle_list
     ]
-
     print(f"Found {len(puzzle_ids)} puzzles. Starting batch processing...\n")
 
-    # 2. Iterate through every puzzle in the database
     for i, puzzle_id in enumerate(puzzle_ids, start=1):
         print(f"--- [{i}/{len(puzzle_ids)}] Processing Puzzle: {puzzle_id} ---")
 
         try:
-            # Step A: Download the puzzle JSON
-            download.download_puzzle(puzzle_id, save_folder="puzzles", name=puzzle_id)
-            json_path = Path(f"puzzles/{puzzle_id}.json")
+            # 1. Ensure we have the JSON using OS-agnostic pathing
+            json_path: Path = Path("puzzles") / f"{puzzle_id}.json"
+            if not json_path.is_file():
+                download.download_puzzle(
+                    puzzle_id, save_folder="puzzles", name=puzzle_id
+                )
 
-            # Step B: Read the downloaded JSON
-            with open(json_path, "r", encoding="utf-8") as f:
-                puzzle_data = json.load(f)
+            # 2. Smart load/build the graph
+            graph: Any = extract_graph(json_path)
 
-            clean_json = json.dumps(puzzle_data)
-
-            # Step C: Build the Graph (In-Memory)
-            print(f"  > Building graph space...")
-            puz = Puzzle.from_json(clean_json)
-            builder = PuzzleGraphBuilder(puz, clean_json)
-            graph = builder.build()
-
-            # Step D: Evaluate the Graph
-            print(f"  > Calculating heuristic score...")
-            raw_score = puzzle_evaluation(graph, puzzle_id)
-            final_score = max(0.0, min(5.0, raw_score))
-
-            # Step E: Submit the Rating
-            submit_rating(puzzle_id, final_score, token)
+            # 3. Evaluate and Submit
+            raw_score: float = float(puzzle_evaluation(graph, puzzle_id))
+            final_score: float = max(0.0, min(5.0, raw_score))
+            submit_rating(puzzle_id, final_score, active_tokens)
 
         except Exception as e:
             print(f"⚠️ Skipping {puzzle_id} due to an error: {e}")
-            continue  # If one puzzle fails (e.g. impossible to solve), skip to the next
+            continue
 
         print("-" * 50)
 
-    print("\n✅ Batch evaluation complete!")
+    print("\n Batch evaluation complete!")
 
 
 if __name__ == "__main__":
