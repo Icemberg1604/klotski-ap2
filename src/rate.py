@@ -91,8 +91,8 @@ def main() -> None:
     load_dotenv()
 
     active_tokens: list[str] = []
-    token1 = os.getenv("KLOTSKI_TOKEN")
-    token2 = os.getenv("FRIEND_KLOTSKI_TOKEN")
+    token1 = os.getenv("KLOTSKI_TOKEN_MIGUEL")
+    token2 = os.getenv("KLOTSKI_TOKEN_MARCOS")
 
     if token1:
         active_tokens.append(token1)
@@ -139,7 +139,6 @@ def main() -> None:
     print("Calculating heuristic score...")
     raw_score = puzzle_evaluation(puzzle_graph, puzzle_id)
     final_score = max(0.0, min(5.0, raw_score))
-
     submit_rating(puzzle_id, final_score, active_tokens)
 
 
