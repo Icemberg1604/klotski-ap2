@@ -28,8 +28,8 @@ def main() -> None:
 
     load_dotenv()
     active_tokens: list[str] = []
-    token1: str | None = os.getenv("KLOTSKI_TOKEN_MIGUEL")
-    token2: str | None = os.getenv("KLOTSKI_TOKEN_MARCOS")
+    token1: str | None = os.getenv("KLOTSKI_TOKEN1")
+    token2: str | None = os.getenv("KLOTSKI_TOKEN2")
 
     if token1:
         active_tokens.append(token1)

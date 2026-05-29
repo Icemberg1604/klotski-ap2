@@ -80,7 +80,7 @@ def main() -> None:
         sys.exit(1)
 
     load_dotenv()
-    MY_TOKEN = os.getenv("KLOTSKI_TOKEN_MIGUEL")
+    MY_TOKEN = os.getenv("KLOTSKI_TOKEN1")
     if not MY_TOKEN:
         print("Error: KLOTSKI_TOKEN environment variable is missing.")
         sys.exit(1)
